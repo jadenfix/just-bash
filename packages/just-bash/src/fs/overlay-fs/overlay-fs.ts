@@ -146,6 +146,7 @@ export class OverlayFs implements IFileSystem {
   private readonly memory: Map<string, MemoryEntry> = new Map();
   private readonly deleted: Set<string> = new Set();
   private nextMemoryIdentity = 1;
+  private nextContentVersion = 1;
   private retainedMemoryBytes = 0;
 
   private memoryEntryBytes(entry: MemoryEntry | undefined): number {
@@ -171,6 +172,9 @@ export class OverlayFs implements IFileSystem {
     const released = this.memoryEntryBytes(this.memory.get(path));
     const added = this.memoryEntryBytes(entry);
     this.assertMemoryCapacity(added, released);
+    if (entry.type === "file" && entry.contentVersion === undefined) {
+      entry.contentVersion = this.nextContentVersion++;
+    }
     this.memory.set(path, entry);
     this.retainedMemoryBytes += added - released;
   }
@@ -615,7 +619,7 @@ export class OverlayFs implements IFileSystem {
       existingEntry.appendChunks.push(newBuffer);
       this.retainedMemoryBytes += newBuffer.byteLength;
       existingEntry.mtime = new Date();
-      existingEntry.contentVersion = (existingEntry.contentVersion ?? 0) + 1;
+      existingEntry.contentVersion = this.nextContentVersion++;
       this.deleted.delete(normalized);
       return;
     }
@@ -1265,6 +1269,9 @@ export class OverlayFs implements IFileSystem {
     staged: StagedMoveEntry[],
   ): Promise<void> {
     const stat = await this.lstat(source);
+    if (stat.isSymbolicLink && !this.allowSymlinks) {
+      throw new Error(`ENOENT: no such file or directory, mv '${source}'`);
+    }
     const existing = this.memory.get(source);
     let entry: MemoryEntry;
     if (existing) {
