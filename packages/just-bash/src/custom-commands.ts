@@ -104,13 +104,47 @@ export function defineCommand(
   return { name, trusted: options.trusted !== false, execute };
 }
 
+/** A caller waiting for a shared lazy load to settle. */
+type LoadWaiter = {
+  resolve(command: Command): void;
+  reject(error: unknown): void;
+};
+
 /**
  * Create a lazy-loaded wrapper for a custom command.
  * The command is only loaded when first executed.
+ *
+ * The load is shared, and waiters can detach from it. Both properties matter
+ * once an invocation can be cancelled: a cancelled waiter must not start a
+ * competing load, and it must not stay attached to a load that may never
+ * settle. Keeping only the waiter's own promise lets a cancelled waiter be
+ * collected instead of being retained by the shared load, so repeated
+ * cancellations cannot accumulate.
  */
 export function createLazyCustomCommand(lazy: LazyCommand): Command {
   let cached: Command | null = null;
-  let loading: Promise<Command> | null = null;
+  let loading = false;
+  const waiters = new Set<LoadWaiter>();
+
+  const startLoading = (): void => {
+    loading = true;
+    lazy.load().then(
+      (command) => {
+        cached = command;
+        for (const waiter of waiters) waiter.resolve(command);
+        waiters.clear();
+      },
+      (error: unknown) => {
+        // A failed dynamic import may be transient: do not cache the failure,
+        // so a later explicit invocation retries. This also keeps the failure
+        // observed when every waiter gave up before it arrived.
+        loading = false;
+        for (const waiter of waiters) waiter.reject(error);
+        waiters.clear();
+      },
+    );
+  };
+
   return {
     name: lazy.name,
     trusted: lazy.trusted !== false,
@@ -119,27 +153,23 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
       ctx: ResolvedCommandContext,
     ): Promise<ExecResult> {
       if (!cached) {
-        let currentLoading = loading;
-        if (!currentLoading) {
-          currentLoading = lazy.load().then((command) => {
-            cached = command;
-            return command;
-          });
-          loading = currentLoading;
-          // A failed dynamic import may be transient: do not cache the failure,
-          // so a later explicit invocation retries while concurrent callers keep
-          // sharing this load. Cancellation is not a load failure, so a
-          // cancelled waiter leaves the shared load registered. Attaching this
-          // handler at creation keeps the failure observed either way.
-          currentLoading.catch(() => {
-            if (loading === currentLoading) loading = null;
-          });
+        if (!loading) startLoading();
+        let waiter: LoadWaiter | undefined;
+        const loaded = new Promise<Command>((resolve, reject) => {
+          waiter = { resolve, reject };
+          waiters.add(waiter);
+        });
+        try {
+          cached = await raceCancellation(
+            loaded,
+            ctx.signal,
+            `bash: ${lazy.name} was cancelled before it started\n`,
+          );
+        } finally {
+          // A cancelled waiter no longer owns this load's outcome, and the
+          // shared load must not keep it alive while it is still pending.
+          if (waiter) waiters.delete(waiter);
         }
-        cached = await raceCancellation(
-          currentLoading,
-          ctx.signal,
-          `bash: ${lazy.name} was cancelled before it started\n`,
-        );
       }
       const command = cached;
       if (!command) throw new Error(`Failed to load command: ${lazy.name}`);
