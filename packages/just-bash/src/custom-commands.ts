@@ -13,6 +13,7 @@ import {
   type ExecutionLimits,
   resolveLimits,
 } from "./limits.js";
+import { DefenseInDepthBox } from "./security/defense-in-depth-box.js";
 import type {
   Command,
   CommandContext,
@@ -126,23 +127,44 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
   let loading = false;
   const waiters = new Set<LoadWaiter>();
 
+  /** Publish a completed shared load to the invocations still waiting. */
+  const succeed = (command: Command): void => {
+    cached = command;
+    for (const waiter of waiters) waiter.resolve(command);
+    waiters.clear();
+  };
+
+  /**
+   * Publish a failed shared load. The failure is consumed here, so it cannot
+   * escape as an unhandled rejection, and it is not cached, so a later
+   * invocation retries.
+   */
+  const fail = (error: unknown): void => {
+    loading = false;
+    for (const waiter of waiters) waiter.reject(error);
+    waiters.clear();
+  };
+
   const startLoading = (): void => {
     loading = true;
-    lazy.load().then(
-      (command) => {
-        cached = command;
-        for (const waiter of waiters) waiter.resolve(command);
-        waiters.clear();
-      },
-      (error: unknown) => {
-        // A failed dynamic import may be transient: do not cache the failure,
-        // so a later explicit invocation retries. This also keeps the failure
-        // observed when every waiter gave up before it arrived.
-        loading = false;
-        for (const waiter of waiters) waiter.reject(error);
-        waiters.clear();
-      },
-    );
+    let loaded: Promise<Command>;
+    try {
+      loaded = lazy.load();
+    } catch (error) {
+      // A host loader may throw before returning its promise. That is the same
+      // failure transition as a rejected load: waiting callers are notified and
+      // a later invocation retries.
+      fail(error);
+      return;
+    }
+    // This load outlives the invocation that started it, so its bookkeeping must
+    // not belong to that invocation's security lifetime: callbacks registered
+    // in a sandbox context are blocked once that execution ends, which would
+    // strand the load and let its failure escape. Registering them in a trusted
+    // scope leaves the host loader itself untrusted.
+    DefenseInDepthBox.runTrusted(() => {
+      loaded.then(succeed, fail);
+    });
   };
 
   return {
@@ -153,12 +175,14 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
       ctx: ResolvedCommandContext,
     ): Promise<ExecResult> {
       if (!cached) {
-        if (!loading) startLoading();
+        // Subscribe before starting the shared load, so a loader that fails
+        // immediately still reaches this invocation.
         let waiter: LoadWaiter | undefined;
         const loaded = new Promise<Command>((resolve, reject) => {
           waiter = { resolve, reject };
           waiters.add(waiter);
         });
+        if (!loading) startLoading();
         try {
           cached = await raceCancellation(
             loaded,

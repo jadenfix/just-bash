@@ -49,19 +49,13 @@ export function combineAbortSignals(
 }
 
 /**
- * Wait for host work that cannot observe cancellation, and give up as soon as
- * `signal` aborts.
+ * Wait for host work that cannot observe cancellation, giving up when `signal`
+ * aborts.
  *
- * Host work such as a dynamic import or a caller-provided loader cannot be
- * cancelled. A cancelled invocation must not keep waiting for it either: the
- * deadline machinery treats a command that does not settle within its cleanup
- * grace window as one that ignored cancellation, poisons the shared execution
- * scope, and the caller's remaining statements never run. Work that is still
- * resolving has nothing to unwind, so the invocation can report cancellation
- * immediately instead.
- *
- * Both paths keep the abandoned work observed, so a load that completes or
- * fails after this gives up cannot become an unhandled rejection.
+ * A cancelled invocation must not keep waiting for uncancellable host work: its
+ * caller bounds how long it waits for a command to unwind, and a command that is
+ * still resolving has nothing to unwind. The abandoned work stays observed, and
+ * the abort listener is removed on both paths.
  */
 export async function raceCancellation<T>(
   work: Promise<T>,
