@@ -18,7 +18,7 @@ import {
   type FileContent,
   fromBuffer,
   getEncoding,
-  toOwnedBuffer,
+  toBuffer,
 } from "../encoding.js";
 import type {
   CpOptions,
@@ -61,7 +61,6 @@ interface MemoryFileEntry {
   content: Uint8Array;
   /** Append segments retained without copying the complete file per append. */
   appendChunks?: Uint8Array[];
-  contentVersion?: number;
   mode: number;
   mtime: Date;
   identity?: string;
@@ -148,8 +147,8 @@ export class OverlayFs implements IFileSystem {
   private readonly memory: Map<string, MemoryEntry> = new Map();
   private readonly deleted: Set<string> = new Set();
   private nextMemoryIdentity = 1;
-  private nextContentVersion = 1;
   private retainedMemoryBytes = 0;
+  private fileReferences = new WeakMap<MemoryFileEntry, number>();
 
   private memoryEntryBytes(entry: MemoryEntry | undefined): number {
     if (!entry || entry.type !== "file") return 0;
@@ -171,21 +170,58 @@ export class OverlayFs implements IFileSystem {
   }
 
   private setMemoryEntry(path: string, entry: MemoryEntry): void {
-    const released = this.memoryEntryBytes(this.memory.get(path));
-    const added = this.memoryEntryBytes(entry);
+    const previous = this.memory.get(path);
+    if (previous === entry) return;
+    const released = this.wouldReleaseBytes(previous);
+    const added =
+      entry.type === "file" && !this.fileReferences.has(entry)
+        ? this.memoryEntryBytes(entry)
+        : 0;
     this.assertMemoryCapacity(added, released);
-    if (entry.type === "file" && entry.contentVersion === undefined) {
-      entry.contentVersion = this.nextContentVersion++;
+    this.deleteMemoryEntry(path);
+    if (entry.type === "file") {
+      this.fileReferences.set(entry, (this.fileReferences.get(entry) ?? 0) + 1);
     }
     this.memory.set(path, entry);
-    this.retainedMemoryBytes += added - released;
+    this.retainedMemoryBytes += added;
+  }
+
+  private wouldReleaseBytes(entry: MemoryEntry | undefined): number {
+    return entry?.type === "file" && this.fileReferences.get(entry) === 1
+      ? this.memoryEntryBytes(entry)
+      : 0;
   }
 
   private deleteMemoryEntry(path: string): void {
     const existing = this.memory.get(path);
     if (!existing) return;
-    this.retainedMemoryBytes -= this.memoryEntryBytes(existing);
+    this.retainedMemoryBytes -= this.wouldReleaseBytes(existing);
+    if (existing.type === "file") {
+      const remaining = (this.fileReferences.get(existing) ?? 1) - 1;
+      if (remaining) this.fileReferences.set(existing, remaining);
+      else this.fileReferences.delete(existing);
+    }
     this.memory.delete(path);
+  }
+
+  private writeMemoryFile(path: string, content: Uint8Array): void {
+    const existing = this.memory.get(path);
+    if (existing?.type === "file") {
+      const previousBytes = this.memoryEntryBytes(existing);
+      this.assertMemoryCapacity(content.byteLength, previousBytes);
+      this.retainedMemoryBytes += content.byteLength - previousBytes;
+      existing.content = content;
+      existing.appendChunks = undefined;
+      existing.mtime = new Date();
+    } else {
+      this.setMemoryEntry(path, {
+        type: "file",
+        content,
+        mode: DEFAULT_FILE_MODE,
+        mtime: new Date(),
+      });
+    }
+    this.deleted.delete(path);
   }
 
   private identityFor(entry: MemoryEntry): string {
@@ -311,13 +347,8 @@ export class OverlayFs implements IFileSystem {
         this.memoryEntryBytes(this.memory.get(normalized)),
       );
     }
-    const buffer = toOwnedBuffer(content);
-    this.setMemoryEntry(normalized, {
-      type: "file",
-      content: buffer,
-      mode: DEFAULT_FILE_MODE,
-      mtime: new Date(),
-    });
+    const buffer = toBuffer(content);
+    this.writeMemoryFile(normalized, buffer);
   }
 
   private getDirname(path: string): string {
@@ -509,7 +540,7 @@ export class OverlayFs implements IFileSystem {
         );
       }
       if (!memEntry.appendChunks || memEntry.appendChunks.length === 0) {
-        return new Uint8Array(memEntry.content);
+        return memEntry.content;
       }
       const total = memEntry.appendChunks.reduce(
         (sum, chunk) => sum + chunk.byteLength,
@@ -527,7 +558,7 @@ export class OverlayFs implements IFileSystem {
       }
       memEntry.content = combined;
       memEntry.appendChunks = undefined;
-      return new Uint8Array(combined);
+      return combined;
     }
 
     // Fall back to real filesystem.  Use the canonical path for I/O to
@@ -601,15 +632,9 @@ export class OverlayFs implements IFileSystem {
         this.memoryEntryBytes(this.memory.get(normalized)),
       );
     }
-    const buffer = toOwnedBuffer(content, encoding);
+    const buffer = toBuffer(content, encoding);
 
-    this.setMemoryEntry(normalized, {
-      type: "file",
-      content: buffer,
-      mode: DEFAULT_FILE_MODE,
-      mtime: new Date(),
-    });
-    this.deleted.delete(normalized);
+    this.writeMemoryFile(normalized, buffer);
   }
 
   async appendFile(
@@ -624,7 +649,7 @@ export class OverlayFs implements IFileSystem {
     if (content instanceof Uint8Array) {
       this.assertMemoryCapacity(content.byteLength);
     }
-    const newBuffer = toOwnedBuffer(content, encoding);
+    const newBuffer = toBuffer(content, encoding);
 
     const existingEntry = this.memory.get(normalized);
     if (existingEntry?.type === "file") {
@@ -633,7 +658,6 @@ export class OverlayFs implements IFileSystem {
       existingEntry.appendChunks.push(newBuffer);
       this.retainedMemoryBytes += newBuffer.byteLength;
       existingEntry.mtime = new Date();
-      existingEntry.contentVersion = this.nextContentVersion++;
       this.deleted.delete(normalized);
       return;
     }
@@ -709,8 +733,6 @@ export class OverlayFs implements IFileSystem {
         dev: MEMORY_DEVICE,
         ino: this.inodeFor(entry),
         identity: this.identityFor(entry),
-        contentVersion:
-          entry.type === "file" ? (entry.contentVersion ?? 0) : undefined,
       };
     }
 
@@ -798,8 +820,6 @@ export class OverlayFs implements IFileSystem {
         dev: MEMORY_DEVICE,
         ino: this.inodeFor(entry),
         identity: this.identityFor(entry),
-        contentVersion:
-          entry.type === "file" ? (entry.contentVersion ?? 0) : undefined,
       };
     }
 
@@ -1341,6 +1361,12 @@ export class OverlayFs implements IFileSystem {
     const destNorm = normalizePath(dest);
     const source = await this.lstat(srcNorm);
     if (srcNorm === destNorm) return;
+    const sourceEntry = this.memory.get(srcNorm);
+    if (
+      sourceEntry?.type === "file" &&
+      sourceEntry === this.memory.get(destNorm)
+    )
+      return;
     if (source.isDirectory && isSameOrDescendantPath(srcNorm, destNorm))
       throw new Error(`EINVAL: cannot move '${src}' into itself, '${dest}'`);
     try {
@@ -1358,15 +1384,10 @@ export class OverlayFs implements IFileSystem {
     const staged: StagedMoveEntry[] = [];
     await this.stageMoveEntry(srcNorm, destNorm, staged);
     let added = 0;
-    let released = 0;
+    const released = this.wouldReleaseBytes(this.memory.get(destNorm));
     for (const stagedEntry of staged) {
-      const { source, destination } = stagedEntry;
-      added +=
-        "entry" in stagedEntry
-          ? this.memoryEntryBytes(stagedEntry.entry)
-          : stagedEntry.backingFile.size;
-      released += this.memoryEntryBytes(this.memory.get(source));
-      released += this.memoryEntryBytes(this.memory.get(destination));
+      // Existing memory inodes stay retained, including aliases outside the tree.
+      if ("backingFile" in stagedEntry) added += stagedEntry.backingFile.size;
     }
     this.assertMemoryCapacity(added, released);
 
@@ -1544,16 +1565,21 @@ export class OverlayFs implements IFileSystem {
       throw new Error(`EEXIST: file already exists, link '${newPath}'`);
     }
 
-    // This backend copies file data instead of retaining a shared inode.
-    // Give the copy its own identity so callers do not mistake it for one.
-    const content = await this.readFileBuffer(existingNorm);
+    let entry = this.memory.get(existingNorm);
+    if (!entry) {
+      this.assertMemoryCapacity(existingStat.size);
+      const content = await this.readFileBuffer(existingNorm);
+      entry = {
+        type: "file",
+        content,
+        mode: existingStat.mode,
+        mtime: existingStat.mtime,
+      };
+      // Both names must use the memory inode after copying a backing file.
+      this.setMemoryEntry(existingNorm, entry);
+    }
     this.ensureParentDirs(newNorm);
-    this.setMemoryEntry(newNorm, {
-      type: "file",
-      content,
-      mode: existingStat.mode,
-      mtime: new Date(),
-    });
+    this.setMemoryEntry(newNorm, entry);
     this.deleted.delete(newNorm);
   }
 

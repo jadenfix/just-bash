@@ -88,11 +88,6 @@ export interface FsStat {
   dev?: number | bigint;
   ino?: number | bigint;
   identity?: string;
-  /**
-   * Changes whenever file contents change, including same-size writes that
-   * preserve mtime. Omit when the backend cannot provide a reliable version.
-   */
-  contentVersion?: number | string;
 }
 
 /**

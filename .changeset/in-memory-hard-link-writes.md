@@ -2,4 +2,4 @@
 "just-bash": patch
 ---
 
-Keep `InMemoryFs` hard links coherent across writes while counting the shared file body once against the filesystem byte limit. Preserve symlink entries and inode metadata when moving files in `OverlayFs`.
+Keep hard links coherent across writes in `InMemoryFs` and `OverlayFs`, counting each shared file entry once against the filesystem byte limit. Preserve inode metadata across writes and directory moves, and reject moves onto nonempty directories.

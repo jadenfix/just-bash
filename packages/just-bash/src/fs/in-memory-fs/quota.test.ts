@@ -3,6 +3,34 @@ import { Bash } from "../../Bash.js";
 import { InMemoryFs } from "./in-memory-fs.js";
 
 describe("InMemoryFs retained-byte accounting", () => {
+  it("preserves identity and mode before and after removing an alias", async () => {
+    const fs = new InMemoryFs(undefined, { maxTotalBytes: 8 });
+    await fs.writeFile("/file", "12345678");
+    await fs.chmod("/file", 0o600);
+    const original = await fs.stat("/file");
+
+    for (const linked of [false, true]) {
+      if (linked) {
+        await fs.link("/file", "/alias");
+        await fs.rm("/alias");
+      }
+      await fs.writeFile("/file", "1234");
+      await fs.appendFile("/file", "5678");
+      expect(await fs.stat("/file")).toMatchObject({
+        identity: original.identity,
+        ino: original.ino,
+        mode: 0o600,
+        size: 8,
+      });
+      expect(await fs.readFile("/file")).toBe("12345678");
+      await expect(fs.appendFile("/file", "x")).rejects.toThrow("ENOSPC");
+    }
+    await fs.rm("/file");
+    await expect(
+      fs.writeFile("/replacement", "12345678"),
+    ).resolves.toBeUndefined();
+  });
+
   it("counts a hard-linked body once and releases it after the final alias", async () => {
     const fs = new InMemoryFs(undefined, { maxTotalBytes: 8 });
     await fs.writeFile("/original", "12345678");
