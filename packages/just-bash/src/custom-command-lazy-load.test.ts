@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Bash } from "./Bash.js";
+import { _promiseThen } from "./security/trusted-globals.js";
 import { withUnhandledRejectionsTracked } from "./test-utils/unhandled-rejections.js";
 import type { Command } from "./types.js";
 
@@ -130,6 +131,50 @@ describe("lazy custom command loading", () => {
     expect(later.stdout).toBe("LOADED\n");
     expect(later.exitCode).toBe(0);
     expect(loadCalls).toBe(1);
+  });
+
+  it("does not run a loader-controlled promise method", async () => {
+    let thenCalls = 0;
+    let blockedGlobalReachable: boolean | undefined;
+    const bash = new Bash({
+      customCommands: [
+        {
+          name: "custom-then",
+          trusted: false,
+          load: () => {
+            const promise = Promise.resolve(loadedCommand("custom-then"));
+            // The loader controls this method; whoever calls it runs loader code.
+            // biome-ignore lint/suspicious/noThenProperty: the loader-controlled then is exactly what this test exercises
+            Object.defineProperty(promise, "then", {
+              value: (onFulfilled?: unknown, onRejected?: unknown) => {
+                thenCalls += 1;
+                try {
+                  Function("return 42")();
+                  blockedGlobalReachable = true;
+                } catch {
+                  blockedGlobalReachable = false;
+                }
+                return _promiseThen.call(
+                  promise,
+                  onFulfilled as () => unknown,
+                  onRejected as () => unknown,
+                );
+              },
+            });
+            return promise;
+          },
+        },
+      ],
+    });
+
+    const result = await bash.exec("custom-then");
+
+    expect(result.stdout).toBe("LOADED\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    // Nothing the loader controls may run with blocking suspended.
+    expect(blockedGlobalReachable).not.toBe(true);
+    expect(thenCalls).toBe(0);
   });
 
   it("retries a load that failed after an untrusted invocation was cancelled", async () => {

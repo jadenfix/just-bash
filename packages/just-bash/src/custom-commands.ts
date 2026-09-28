@@ -13,7 +13,7 @@ import {
   type ExecutionLimits,
   resolveLimits,
 } from "./limits.js";
-import { DefenseInDepthBox } from "./security/defense-in-depth-box.js";
+import { _promiseThen } from "./security/trusted-globals.js";
 import type {
   Command,
   CommandContext,
@@ -149,7 +149,7 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
     loading = true;
     let loaded: Promise<Command>;
     try {
-      loaded = lazy.load();
+      loaded = Promise.resolve(lazy.load());
     } catch (error) {
       // A host loader may throw before returning its promise. That is the same
       // failure transition as a rejected load: waiting callers are notified and
@@ -157,14 +157,13 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
       fail(error);
       return;
     }
-    // This load outlives the invocation that started it, so its bookkeeping must
-    // not belong to that invocation's security lifetime: callbacks registered
-    // in a sandbox context are blocked once that execution ends, which would
-    // strand the load and let its failure escape. Registering them in a trusted
-    // scope leaves the host loader itself untrusted.
-    DefenseInDepthBox.runTrusted(() => {
-      loaded.then(succeed, fail);
-    });
+    // This load outlives the invocation that started it, so its settlement must
+    // not be tied to that invocation's security lifetime: callbacks registered
+    // through the patched Promise.prototype.then are blocked once that execution
+    // ends, which would strand the load and let its failure escape. Settling
+    // through the intrinsic then also keeps the loader's own promise methods,
+    // and anything they run, outside trusted code.
+    _promiseThen.call(loaded, succeed, fail);
   };
 
   return {
