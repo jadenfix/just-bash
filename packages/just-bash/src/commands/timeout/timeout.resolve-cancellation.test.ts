@@ -32,6 +32,7 @@ describe("timeout cancellation while a command resolves", () => {
     const loadGate = new Promise<void>((resolve) => {
       releaseLoad = resolve;
     });
+    let bodyRuns = 0;
     const bash = new Bash({
       customCommands: [
         {
@@ -41,6 +42,7 @@ describe("timeout cancellation while a command resolves", () => {
             return {
               name: "late-import",
               async execute(_args, ctx) {
+                bodyRuns += 1;
                 await ctx.fs.writeFile("/late-import-ran", "ran");
                 return { stdout: "LATE_BODY\n", stderr: "", exitCode: 0 };
               },
@@ -57,23 +59,24 @@ describe("timeout cancellation while a command resolves", () => {
           echo "TIMEOUT_EXIT=$?"
           echo AFTER
         `);
-        const bodyNeverRan = !(await bash.fs.exists("/late-import-ran"));
         releaseLoad();
         // Running the command again waits for the completed load, so it is the
         // signal that the abandoned load settled; no fixed sleep is needed.
         const later = await bash.exec("timeout 1 late-import");
-        return { cancelled, bodyNeverRan, later };
+        return { cancelled, later };
       },
     );
 
     expect(result.cancelled.stdout).toBe("TIMEOUT_EXIT=124\nAFTER\n");
     expect(result.cancelled.stderr).toBe("");
     expect(result.cancelled.exitCode).toBe(0);
-    expect(result.bodyNeverRan).toBe(true);
     // The completed load is still usable by a later invocation.
     expect(result.later.stdout).toBe("LATE_BODY\n");
     expect(result.later.stderr).toBe("");
     expect(result.later.exitCode).toBe(0);
+    // Only the later invocation entered the body, even though the load finished
+    // after the cancelled one gave up.
+    expect(bodyRuns).toBe(1);
     expect(rejections).toEqual([]);
   });
 });
