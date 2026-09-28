@@ -147,6 +147,12 @@ export class ReadWriteFs implements IFileSystem {
    * so callers that accept the root validate it with resolveAndValidate().
    */
   private validateParent(realPath: string, virtualPath: string): string {
+    if (realPath === this.root) {
+      throw new Error(
+        `EACCES: permission denied, '${virtualPath}' resolves outside sandbox`,
+      );
+    }
+
     const canonical = this.hostPaths.resolveParent({ path: virtualPath });
     if (canonical === null) {
       return this.resolveAndValidate(realPath, virtualPath);
