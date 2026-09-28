@@ -98,9 +98,10 @@ export const realpathCommand: RuntimeCommand = {
       }
 
       try {
-        const resolved = await ctx.fs.realpathFromCwd({
+        const resolved = await ctx.fs.realpath({
           cwd: ctx.cwd,
           path: file,
+          mode: "all-but-last",
           signal: ctx.signal,
         });
         appendOutput({ stream: "stdout", value: `${resolved}\n` });

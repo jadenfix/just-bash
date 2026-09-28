@@ -435,7 +435,7 @@ describe("OverlayFs", () => {
       await overlay.writeFile("/target.txt", "target content");
 
       await expect(
-        overlay.realpathFromCwd({ cwd: "/", path: "target.txt" }),
+        overlay.realpath({ cwd: "/", path: "target.txt" }),
       ).resolves.toBe("/target.txt");
     });
 

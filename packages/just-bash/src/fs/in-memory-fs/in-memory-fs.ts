@@ -23,6 +23,7 @@ import type {
   LazyFileProvider,
   MkdirOptions,
   ReadFileOptions,
+  RealpathOptions,
   RmOptions,
   SymlinkEntry,
   WriteFileOptions,
@@ -971,15 +972,12 @@ export class InMemoryFs implements IFileSystem {
    * Resolve all symlinks in a path to get the canonical physical path.
    * This is equivalent to POSIX realpath().
    */
-  async realpath(path: string): Promise<string> {
-    validatePath(path, "realpath");
-    return resolveFsPath({ fs: this, path });
-  }
-
-  async realpathFromCwd(
-    options: Pick<ResolveFsPathOptions, "cwd" | "path" | "signal">,
-  ): Promise<string> {
-    return resolveFsPath({ fs: this, ...options });
+  async realpath(input: string | RealpathOptions): Promise<string> {
+    if (typeof input === "string") {
+      validatePath(input, "realpath");
+    }
+    const options = typeof input === "string" ? { path: input } : input;
+    return resolveFsPath({ ...options, fs: this });
   }
 
   /**

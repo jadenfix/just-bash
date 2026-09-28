@@ -126,7 +126,11 @@ describe("realpath", () => {
       timerRan = true;
     }, 0);
 
-    const result = await fs.realpathFromCwd({ cwd: "/", path: operand });
+    const result = await fs.realpath({
+      cwd: "/",
+      path: operand,
+      mode: "all-but-last",
+    });
 
     clearTimeout(timer);
     expect(result).toBe("/target");
@@ -139,9 +143,10 @@ describe("realpath", () => {
     const timer = setTimeout(() => controller.abort(), 0);
 
     await expect(
-      fs.realpathFromCwd({
+      fs.realpath({
         cwd: "/",
         path: `${"./".repeat(20_000)}target`,
+        mode: "all-but-last",
         signal: controller.signal,
       }),
     ).rejects.toBeInstanceOf(ExecutionAbortedError);

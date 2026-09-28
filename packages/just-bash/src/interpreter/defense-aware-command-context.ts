@@ -166,13 +166,7 @@ function wrapFileSystem(
       requireDefenseContext,
       component,
       "fs.realpath",
-    ),
-    realpathFromCwd: wrapFunction(
-      fs.realpathFromCwd.bind(fs),
-      requireDefenseContext,
-      component,
-      "fs.realpathFromCwd",
-    ),
+    ) as RuntimeCommandContext["fs"]["realpath"],
     utimes: wrapFunction(
       fs.utimes.bind(fs),
       requireDefenseContext,

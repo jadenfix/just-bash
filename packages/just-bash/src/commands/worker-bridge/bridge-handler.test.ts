@@ -58,6 +58,30 @@ describe("BridgeHandler raceDeadline", () => {
     await expect(runPromise).resolves.toMatchObject({ exitCode: 0 });
   });
 
+  it("REALPATH requires final paths and symlink targets to exist", async () => {
+    const shared = createSharedBuffer();
+    const protocol = new ProtocolBuffer(shared);
+    const filesystem = new InMemoryFs();
+    await filesystem.symlink("/work/absent", "/work/dangling");
+    const handler = new BridgeHandler(shared, filesystem, "/work", "test-cmd");
+    const runPromise = handler.run(2000);
+
+    for (const path of [
+      "missing",
+      "/work/missing",
+      "dangling",
+      "/work/dangling",
+    ]) {
+      expect(await sendOp(protocol, OpCode.REALPATH, { path })).toBe(
+        Status.ERROR,
+      );
+      expect(protocol.getResultAsString()).toContain("ENOENT");
+    }
+
+    await sendOp(protocol, OpCode.EXIT, { flags: 0 });
+    await expect(runPromise).resolves.toMatchObject({ exitCode: 0 });
+  });
+
   it("HTTP_REQUEST resolves with error when secureFetch never settles", async () => {
     const shared = createSharedBuffer();
     const protocol = new ProtocolBuffer(shared);

@@ -328,10 +328,9 @@ const fs = new MountableFs({
 ```
 
 **Custom filesystems** - Implement the exported `IFileSystem` interface.
-`realpath(path)` requires every path component, including the final one, to
-exist, while `realpathFromCwd({ cwd, path, signal })` resolves `path` relative
-to `cwd`, permits a missing final component, and supports cancellation through
-`signal`.
+`realpath(path)` is strict. `realpath({ path, cwd, mode, signal })` resolves
+relative paths from `cwd` and is strict by default. Use `mode: "all-but-last"`
+to permit a missing final component.
 
 ## Optional Capabilities
 

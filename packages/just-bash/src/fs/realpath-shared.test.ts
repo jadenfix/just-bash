@@ -95,27 +95,65 @@ describe.each(fileSystems)("shared realpath resolver: $name", ({ create }) => {
     await expect(filesystem.realpath(missing)).rejects.toThrow("ENOENT");
     await expect(filesystem.realpath(dangling)).rejects.toThrow("ENOENT");
     await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "missing" }),
+      filesystem.realpath({ cwd: root, path: "target/dir/keep" }),
+    ).resolves.toBe(pathAt({ root, name: "target/dir/keep" }));
+    await expect(
+      filesystem.realpath({ cwd: root, path: "missing" }),
+    ).rejects.toThrow("ENOENT");
+    await expect(
+      filesystem.realpath({ cwd: root, path: "missing", mode: "strict" }),
+    ).rejects.toThrow("ENOENT");
+    await expect(
+      filesystem.realpath({
+        cwd: root,
+        path: "missing",
+        mode: "unsupported" as "strict",
+      }),
+    ).rejects.toThrow("ENOENT");
+    await expect(
+      filesystem.realpath({ cwd: root, path: missing }),
+    ).rejects.toThrow("ENOENT");
+    await expect(
+      filesystem.realpath({ cwd: root, path: "dangling" }),
+    ).rejects.toThrow("ENOENT");
+    await expect(
+      filesystem.realpath({ cwd: root, path: "missing", mode: "all-but-last" }),
     ).resolves.toBe(missing);
     await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "missing/" }),
+      filesystem.realpath({
+        cwd: root,
+        path: "missing/",
+        mode: "all-but-last",
+      }),
     ).resolves.toBe(missing);
     await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "dangling" }),
+      filesystem.realpath({
+        cwd: root,
+        path: "dangling",
+        mode: "all-but-last",
+      }),
     ).resolves.toBe(pathAt({ root, name: "missing-target" }));
     await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "dangling/" }),
+      filesystem.realpath({
+        cwd: root,
+        path: "dangling/",
+        mode: "all-but-last",
+      }),
     ).resolves.toBe(pathAt({ root, name: "missing-target" }));
     await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "missing/child" }),
+      filesystem.realpath({
+        cwd: root,
+        path: "missing/child",
+        mode: "all-but-last",
+      }),
     ).rejects.toThrow("ENOENT");
   });
 
   it("rejects an empty path", async () => {
     const { filesystem, root } = create();
-    await expect(
-      filesystem.realpathFromCwd({ cwd: root, path: "" }),
-    ).rejects.toThrow("ENOENT");
+    await expect(filesystem.realpath({ cwd: root, path: "" })).rejects.toThrow(
+      "ENOENT",
+    );
   });
 
   it.each([
@@ -297,7 +335,7 @@ describe("mount routing", () => {
       "/base",
     );
     await expect(
-      filesystem.realpathFromCwd({
+      filesystem.realpath({
         cwd: "/mount/left",
         path: "../right/right",
       }),
@@ -360,7 +398,11 @@ describe("realpath work bounds", () => {
       "ENOENT",
     );
     await expect(
-      filesystem.realpathFromCwd({ cwd: "/", path: "empty-target" }),
+      filesystem.realpath({
+        cwd: "/",
+        path: "empty-target",
+        mode: "all-but-last",
+      }),
     ).rejects.toThrow("ENOENT");
   });
 
@@ -370,9 +412,10 @@ describe("realpath work bounds", () => {
     controller.abort();
 
     await expect(
-      filesystem.realpathFromCwd({
+      filesystem.realpath({
         cwd: "/",
         path: "target",
+        mode: "all-but-last",
         signal: controller.signal,
       }),
     ).rejects.toBeInstanceOf(ExecutionAbortedError);
@@ -385,7 +428,7 @@ describe("realpath work bounds", () => {
 
     expect(operand.length).toBe(800_001);
     await expect(
-      filesystem.realpathFromCwd({ cwd: "/", path: operand }),
+      filesystem.realpath({ cwd: "/", path: operand, mode: "all-but-last" }),
     ).rejects.toBeInstanceOf(ExecutionLimitError);
     expect(performance.now() - started).toBeLessThan(1_000);
   });
@@ -396,7 +439,7 @@ describe("realpath work bounds", () => {
       const path = `${"./".repeat(components)}target`;
       const started = performance.now();
       for (let run = 0; run < 5; run++) {
-        await filesystem.realpathFromCwd({ cwd: "/", path });
+        await filesystem.realpath({ cwd: "/", path, mode: "all-but-last" });
       }
       return performance.now() - started;
     };

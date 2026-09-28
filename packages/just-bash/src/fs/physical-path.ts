@@ -1,6 +1,6 @@
 import { rethrowFatalExecutionError } from "../fatal-execution-error.js";
 import * as execution from "../interpreter/errors.js";
-import type { IFileSystem } from "./interface.js";
+import type { IFileSystem, RealpathOptions } from "./interface.js";
 import { MAX_SYMLINK_DEPTH } from "./path-utils.js";
 
 const MAX_COMPONENT_WORK = 100_000;
@@ -307,16 +307,13 @@ export async function resolvePhysicalPath(options: {
 /**
  * Options for resolving a path through an `IFileSystem` adapter.
  *
- * Without `cwd`, the complete path must exist. Supplying `cwd` resolves a
- * relative path from that directory and permits a missing final component.
+ * `cwd` anchors a relative path without changing its existence requirements.
+ * Only `mode: "all-but-last"` permits a missing final component.
  * `op` affects only the operation name included in formatted errors.
  */
-export type ResolveFsPathOptions = {
+export type ResolveFsPathOptions = RealpathOptions & {
   fs: IFileSystem;
-  path: string;
-  cwd?: string;
   op?: string;
-  signal?: AbortSignal;
 };
 
 /**
@@ -326,7 +323,7 @@ export type ResolveFsPathOptions = {
 export async function resolveFsPath(
   options: ResolveFsPathOptions,
 ): Promise<string> {
-  const { fs, path, cwd, op = "realpath", signal } = options;
+  const { fs, path, cwd, mode, op = "realpath", signal } = options;
 
   const unresolved =
     cwd === undefined || path.startsWith("/")
@@ -342,7 +339,7 @@ export async function resolveFsPath(
       path: unresolved,
       lookup: ({ path }) => lookupFs({ fs, path }),
       signal,
-      mode: cwd === undefined ? "existing" : "all-but-last",
+      mode: mode === "all-but-last" ? "all-but-last" : "existing",
     });
   } catch (error) {
     if (!(error instanceof PathError)) {
