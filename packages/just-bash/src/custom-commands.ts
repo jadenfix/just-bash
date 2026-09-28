@@ -8,6 +8,7 @@ import { raceCancellation } from "./abort-signals.js";
 import { type ByteString, EMPTY_BYTES } from "./encoding.js";
 import { getFileSystemIdentity } from "./fs/identity.js";
 import type { IFileSystem } from "./fs/interface.js";
+import { ExecutionAbortedError } from "./interpreter/errors.js";
 import {
   type ExecutionLimitProfile,
   type ExecutionLimits,
@@ -136,7 +137,14 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
         } catch (error) {
           // A failed dynamic import may be transient. Permit a later explicit
           // invocation to retry while still single-flighting concurrent calls.
-          if (loading === currentLoading) loading = null;
+          // Cancellation is not a load failure: the in-flight load stays
+          // registered so cancelling one waiter cannot start a competing load.
+          if (
+            !(error instanceof ExecutionAbortedError) &&
+            loading === currentLoading
+          ) {
+            loading = null;
+          }
           throw error;
         }
       }

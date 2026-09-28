@@ -121,4 +121,30 @@ describe("timeout cancellation while a command resolves", () => {
     expect(result.exitCode).toBe(0);
     expect(unhandled.rejections).toEqual([]);
   });
+
+  it("does not start a competing load when a waiter is cancelled", async () => {
+    let loadCalls = 0;
+    const bash = new Bash({
+      customCommands: [
+        {
+          name: "pending-import",
+          load: () => {
+            loadCalls += 1;
+            return new Promise<never>(() => {});
+          },
+        },
+      ],
+    });
+
+    const result = await bash.exec(`
+      timeout 0.01 pending-import
+      timeout 0.01 pending-import
+      echo "TIMEOUT_EXIT=$?"
+    `);
+
+    expect(result.stdout).toBe("TIMEOUT_EXIT=124\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(loadCalls).toBe(1);
+  });
 });
