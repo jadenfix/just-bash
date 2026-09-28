@@ -8,7 +8,6 @@ import { raceCancellation } from "./abort-signals.js";
 import { type ByteString, EMPTY_BYTES } from "./encoding.js";
 import { getFileSystemIdentity } from "./fs/identity.js";
 import type { IFileSystem } from "./fs/interface.js";
-import { ExecutionAbortedError } from "./interpreter/errors.js";
 import {
   type ExecutionLimitProfile,
   type ExecutionLimits,
@@ -127,26 +126,20 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
             return command;
           });
           loading = currentLoading;
+          // A failed dynamic import may be transient: do not cache the failure,
+          // so a later explicit invocation retries while concurrent callers keep
+          // sharing this load. Cancellation is not a load failure, so a
+          // cancelled waiter leaves the shared load registered. Attaching this
+          // handler at creation keeps the failure observed either way.
+          currentLoading.catch(() => {
+            if (loading === currentLoading) loading = null;
+          });
         }
-        try {
-          cached = await raceCancellation(
-            currentLoading,
-            ctx.signal,
-            `bash: ${lazy.name} was cancelled before it started\n`,
-          );
-        } catch (error) {
-          // A failed dynamic import may be transient. Permit a later explicit
-          // invocation to retry while still single-flighting concurrent calls.
-          // Cancellation is not a load failure: the in-flight load stays
-          // registered so cancelling one waiter cannot start a competing load.
-          if (
-            !(error instanceof ExecutionAbortedError) &&
-            loading === currentLoading
-          ) {
-            loading = null;
-          }
-          throw error;
-        }
+        cached = await raceCancellation(
+          currentLoading,
+          ctx.signal,
+          `bash: ${lazy.name} was cancelled before it started\n`,
+        );
       }
       const command = cached;
       if (!command) throw new Error(`Failed to load command: ${lazy.name}`);
