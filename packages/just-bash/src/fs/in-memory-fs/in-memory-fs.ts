@@ -100,6 +100,7 @@ export class InMemoryFs implements IFileSystem {
       if (!(error instanceof Error) || !error.message.startsWith("ENOENT:"))
         throw error;
       const path = normalizePath(options.path);
+      if (path === options.path) throw error;
       return resolveFsPath({ fs: this, ...options, path });
     }
   }
