@@ -1,5 +1,7 @@
 ---
-"just-bash": patch
+"just-bash": major
 ---
 
-feat: add `realpath` command for resolving canonical virtual filesystem paths
+Add the `realpath` command for resolving canonical virtual filesystem paths.
+
+Custom `IFileSystem` implementations must now implement `realpathFromCwd()`.
