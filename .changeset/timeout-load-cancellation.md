@@ -2,6 +2,6 @@
 "just-bash": patch
 ---
 
-timeout: keep the shell running when a deadline lands while a command is still loading
+timeout: a deadline that lands while a command is still loading no longer aborts the rest of the script
 
-A cancelled command that had not started yet could not acknowledge cancellation until its module import finished, so a script that timed out a cold command lost every statement after it. Cancelled invocations now stop waiting for that import and report cancellation instead.
+`timeout` on a cold command — the first use of any lazily loaded command — could return 124 and still kill every statement after it. Cancelled invocations now stop waiting for the load and report cancellation instead.
