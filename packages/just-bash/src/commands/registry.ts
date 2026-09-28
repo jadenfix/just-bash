@@ -1,6 +1,7 @@
 // RuntimeCommand registry with statically analyzable lazy loading
 // Each command has an explicit loader function for bundler compatibility (Next.js, etc.)
 
+import { raceCancellation } from "../abort-signals.js";
 import { DefenseInDepthBox } from "../security/defense-in-depth-box.js";
 import type {
   ExecResult,
@@ -563,8 +564,14 @@ function createLazyCommand(def: LazyCommandDef): RuntimeCommand {
         // Lazy imports run inside the defense-in-depth context.
         // Module loading may access blocked globals (e.g., worker_threads
         // uses SharedArrayBuffer, sql.js uses WebAssembly), so we suspend
-        // blocking during the import.
-        cmd = await DefenseInDepthBox.runTrustedAsync(() => def.load());
+        // blocking during the import. Loading is host work that cannot be
+        // cancelled, so give up on it as soon as this invocation is cancelled
+        // instead of holding the caller's cleanup grace window open.
+        cmd = await raceCancellation(
+          DefenseInDepthBox.runTrustedAsync(() => def.load()),
+          ctx.signal,
+          `bash: ${def.name} was cancelled before it started\n`,
+        );
         cache.set(def.name, cmd);
       }
 
@@ -573,7 +580,11 @@ function createLazyCommand(def: LazyCommandDef): RuntimeCommand {
         ctx.coverage &&
         (typeof __BROWSER__ === "undefined" || !__BROWSER__)
       ) {
-        const { emitFlagCoverage } = await import("./flag-coverage.js");
+        const { emitFlagCoverage } = await raceCancellation(
+          import("./flag-coverage.js"),
+          ctx.signal,
+          `bash: ${def.name} was cancelled before it started\n`,
+        );
         emitFlagCoverage(ctx.coverage, def.name, args);
       }
 

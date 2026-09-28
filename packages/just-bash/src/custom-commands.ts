@@ -4,6 +4,7 @@
  * Provides types and utilities for registering user-provided TypeScript commands.
  */
 
+import { raceCancellation } from "./abort-signals.js";
 import { type ByteString, EMPTY_BYTES } from "./encoding.js";
 import { getFileSystemIdentity } from "./fs/identity.js";
 import type { IFileSystem } from "./fs/interface.js";
@@ -127,7 +128,11 @@ export function createLazyCustomCommand(lazy: LazyCommand): Command {
           loading = currentLoading;
         }
         try {
-          cached = await currentLoading;
+          cached = await raceCancellation(
+            currentLoading,
+            ctx.signal,
+            `bash: ${lazy.name} was cancelled before it started\n`,
+          );
         } catch (error) {
           // A failed dynamic import may be transient. Permit a later explicit
           // invocation to retry while still single-flighting concurrent calls.
