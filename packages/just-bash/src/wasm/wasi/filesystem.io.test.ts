@@ -122,16 +122,11 @@ describe("WASI file I/O", () => {
     }
   });
 
-  it("loads a large file once for repeated small reads", async () => {
+  it("releases file byte leases after each small read", async () => {
     const fs = new InMemoryFs({ "/data": "x".repeat(1024 * 1024) });
-    const original = fs.readFileBuffer.bind(fs);
-    let hostBytes = 0;
-    fs.readFileBuffer = async (path) => {
-      const bytes = await original(path);
-      hostBytes += bytes.length;
-      return bytes;
-    };
-    const bridge = host(fs);
+    const maxLiveBytes = 1024 * 1024;
+    const scope = new ExecutionScope(resolveLimits({ maxLiveBytes }));
+    const bridge = host(fs, scope);
     try {
       const fd = await open(bridge, "data");
       for (let i = 0; i < 3; i++) {
@@ -142,8 +137,27 @@ describe("WASI file I/O", () => {
           size: 1,
         });
         expect(decoder.decode(result)).toBe("x");
+        expect(scope.remainingLiveBytes).toBe(maxLiveBytes);
       }
-      expect(hostBytes).toBe(1024 * 1024);
+    } finally {
+      bridge.close();
+    }
+  });
+
+  it("releases file byte leases when the backend read fails", async () => {
+    const fs = new InMemoryFs({ "/data": "abc" });
+    const maxLiveBytes = 3;
+    const scope = new ExecutionScope(resolveLimits({ maxLiveBytes }));
+    const bridge = host(fs, scope);
+    try {
+      const fd = await open(bridge, "data");
+      fs.readFileBuffer = async () => {
+        throw new Error("EIO: read failed");
+      };
+      await expect(
+        bridge.request({ type: "request", op: "read", fd, size: 1 }),
+      ).rejects.toThrow("EIO: read failed");
+      expect(scope.remainingLiveBytes).toBe(maxLiveBytes);
     } finally {
       bridge.close();
     }
@@ -151,12 +165,6 @@ describe("WASI file I/O", () => {
 
   it("keeps reads current after writes, append, and truncate", async () => {
     const fs = new InMemoryFs({ "/data": "abc" });
-    const original = fs.readFileBuffer.bind(fs);
-    let reads = 0;
-    fs.readFileBuffer = async (path) => {
-      reads++;
-      return original(path);
-    };
     const bridge = host(fs);
     try {
       const fd = await open(
@@ -177,7 +185,6 @@ describe("WASI file I/O", () => {
         offset: 1,
       });
       expect(decoder.decode(await read(3))).toBe("aZc");
-      expect(reads).toBe(1);
 
       await bridge.request({
         type: "request",
@@ -187,11 +194,9 @@ describe("WASI file I/O", () => {
         offset: 3,
       });
       expect(decoder.decode(await read(4))).toBe("aZcd");
-      expect(reads).toBe(2);
 
       await bridge.request({ type: "request", op: "resize", fd, size: 2 });
       expect(decoder.decode(await read(4))).toBe("aZ");
-      expect(reads).toBe(2);
     } finally {
       bridge.close();
     }
@@ -237,7 +242,7 @@ describe("WASI file I/O", () => {
     }
   });
 
-  it("releases a prior file snapshot when reading another file", async () => {
+  it("releases file byte leases between reads of different files", async () => {
     const fileSize = 1024 * 1024;
     const maxLiveBytes = fileSize + fileSize / 2;
     const scope = new ExecutionScope(resolveLimits({ maxLiveBytes }));

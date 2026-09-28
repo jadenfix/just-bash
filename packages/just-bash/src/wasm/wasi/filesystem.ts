@@ -51,22 +51,6 @@ interface Descriptor {
   inheriting: bigint;
 }
 
-interface CachedFile {
-  bytes: Uint8Array;
-  size: number;
-  mtimeMs: number;
-  identity: string | undefined;
-  contentVersion: number | string | undefined;
-  lease: { release(): void } | undefined;
-}
-
-function cacheIdentity(stat: FsStat): string | undefined {
-  if (stat.identity !== undefined) return stat.identity;
-  if (stat.dev !== undefined && stat.ino !== undefined)
-    return `${stat.dev}:${stat.ino}`;
-  return undefined;
-}
-
 function fileStat(stat: FsStat): FileStat {
   return {
     type: stat.isSymbolicLink
@@ -111,7 +95,6 @@ function bigint(value: unknown): bigint {
 /** All guest filesystem authority lives here, on the async host side. */
 export class WasiFileSystem {
   private readonly fds = new Map<number, Descriptor>();
-  private readonly fileCache = new Map<string, CachedFile>();
   private readonly fallbackInodes = new Map<
     string,
     { ino: string; lease: { release(): void } | undefined }
@@ -156,7 +139,6 @@ export class WasiFileSystem {
     this.active = false;
     this.stderr += this.stderrDecoder.decode();
     for (const lease of this.outputLeases.splice(0)) lease.release();
-    this.clearFileCache();
     for (const { lease } of this.fallbackInodes.values()) lease?.release();
     this.fallbackInodes.clear();
     this.fds.clear();
@@ -274,46 +256,14 @@ export class WasiFileSystem {
     return result;
   }
 
-  private invalidate(
+  private async withFileBytes<T>(
     path: string,
-    recursive = false,
-    identity = this.fileCache.get(path)?.identity,
-  ): void {
-    for (const [cachedPath, cached] of this.fileCache) {
-      if (
-        cachedPath === path ||
-        (recursive && cachedPath.startsWith(`${path}/`)) ||
-        (identity !== undefined && cached.identity === identity)
-      ) {
-        cached.lease?.release();
-        this.fileCache.delete(cachedPath);
-      }
-    }
-  }
-
-  private clearFileCache(): void {
-    for (const cached of this.fileCache.values()) cached.lease?.release();
-    this.fileCache.clear();
-  }
-
-  private async fileBytes(path: string): Promise<Uint8Array> {
+    use: (bytes: Uint8Array) => T | Promise<T>,
+  ): Promise<T> {
     const stat = await this.ctx.fs.stat(path);
     this.check();
     if (!stat.isFile) throw new WasiError(WASI.ERRNO_NOTSUP);
     this.size(stat.size);
-    const identity = cacheIdentity(stat);
-    const cached = this.fileCache.get(path);
-    if (
-      stat.contentVersion !== undefined &&
-      cached?.size === stat.size &&
-      cached.mtimeMs === stat.mtime.getTime() &&
-      cached.identity === identity &&
-      cached.contentVersion === stat.contentVersion
-    )
-      return cached.bytes;
-    // Keep one file snapshot at a time so sequential file reads do not retain
-    // every file's bytes against the command's live-byte budget.
-    this.clearFileCache();
     const lease = this.ctx.executionScope?.reserveBytes(
       stat.size,
       "WASI file I/O",
@@ -327,18 +277,9 @@ export class WasiFileSystem {
       this.check();
       this.size(bytes.length);
       if (bytes.length > stat.size) throw new WasiError(WASI.ERRNO_AGAIN);
-      this.fileCache.set(path, {
-        bytes,
-        size: stat.size,
-        mtimeMs: stat.mtime.getTime(),
-        identity,
-        contentVersion: stat.contentVersion,
-        lease,
-      });
-      return bytes;
-    } catch (error) {
+      return await use(bytes);
+    } finally {
       lease?.release();
-      throw error;
     }
   }
 
@@ -347,39 +288,29 @@ export class WasiFileSystem {
     size: number,
     edit: (next: Uint8Array) => void,
   ): Promise<void> {
-    const old = await this.fileBytes(path);
-    this.ctx.executionScope?.consumeWork(
-      Math.ceil(size / RPC_BYTES),
-      "WASI file write",
-    );
-    const lease = this.ctx.executionScope?.reserveBytes(size, "WASI file I/O");
-    let retained = false;
-    try {
-      const next = new Uint8Array(size);
-      next.set(old.subarray(0, size));
-      edit(next);
-      this.check();
-      await this.ctx.fs.writeFile(path, next);
-      this.check();
-      const stat = await this.ctx.fs.stat(path);
-      this.check();
-      if (stat.size !== size) throw new WasiError(WASI.ERRNO_AGAIN);
-      this.invalidate(path);
-      this.fileCache.set(path, {
-        bytes: next,
+    await this.withFileBytes(path, async (old) => {
+      this.ctx.executionScope?.consumeWork(
+        Math.ceil(size / RPC_BYTES),
+        "WASI file write",
+      );
+      const lease = this.ctx.executionScope?.reserveBytes(
         size,
-        mtimeMs: stat.mtime.getTime(),
-        identity: cacheIdentity(stat),
-        contentVersion: stat.contentVersion,
-        lease,
-      });
-      retained = true;
-    } finally {
-      if (!retained) {
+        "WASI file I/O",
+      );
+      try {
+        const next = new Uint8Array(size);
+        next.set(old.subarray(0, size));
+        edit(next);
+        this.check();
+        await this.ctx.fs.writeFile(path, next);
+        this.check();
+        const stat = await this.ctx.fs.stat(path);
+        this.check();
+        if (stat.size !== size) throw new WasiError(WASI.ERRNO_AGAIN);
+      } finally {
         lease?.release();
-        this.invalidate(path);
       }
-    }
+    });
   }
 
   private async read(
@@ -401,9 +332,11 @@ export class WasiFileSystem {
     }
     if (fd.type !== WASI.FILETYPE_REGULAR_FILE)
       throw new WasiError(WASI.ERRNO_ISDIR);
-    const bytes = await this.fileBytes(fd.path);
     const start = offset ?? fd.position;
-    const result = bytes.slice(start, start + length);
+    const result = await this.withFileBytes(
+      fd.path,
+      (bytes) => new Uint8Array(bytes.subarray(start, start + length)),
+    );
     if (offset === undefined) fd.position += result.length;
     return result;
   }
@@ -447,7 +380,6 @@ export class WasiFileSystem {
       fd.flags & WASI.FDFLAGS_APPEND ? stat.size : (offset ?? fd.position);
     const size = this.size(Math.max(stat.size, start + bytes.length));
     if (start === stat.size) {
-      this.invalidate(fd.path, false, cacheIdentity(stat));
       await this.ctx.fs.appendFile(fd.path, bytes);
     } else {
       await this.replaceBytes(fd.path, size, (next) => {
@@ -495,7 +427,6 @@ export class WasiFileSystem {
         throw new WasiError(WASI.ERRNO_INVAL);
       this.check();
       await this.ctx.fs.writeFile(resolved, new Uint8Array());
-      this.invalidate(resolved);
       stat = await this.ctx.fs.stat(resolved);
     }
     this.check();
@@ -508,7 +439,6 @@ export class WasiFileSystem {
       if (!(rights & BigInt(WASI.RIGHTS_FD_WRITE)))
         throw new WasiError(WASI.ERRNO_NOTCAPABLE);
       await this.ctx.fs.writeFile(resolved, new Uint8Array());
-      this.invalidate(resolved, false, cacheIdentity(stat));
       this.check();
     }
     const handle = this.nextFd++;
