@@ -80,7 +80,7 @@ In tests, pass `allowSymlinks: true` to the constructor when testing symlink beh
 
 ### Prototype pollution
 
-User-controlled data (stdin, arguments, file contents, HTTP headers, environment variables) can become JavaScript object keys, so every `Record<string, T>` needs a null prototype. `pnpm lint:banned` enforces it.
+User-controlled data (stdin, arguments, file contents, HTTP headers, environment variables) can become JavaScript object keys, so every `Record<string, T>` needs a null prototype. The banned-patterns linter, which `pnpm lint` runs, enforces it.
 
 - Static lookup tables: `nullPrototype()` from `src/commands/query-engine/safe-object.ts`.
 - Empty accumulators: `Object.create(null)`.
