@@ -27,6 +27,4 @@ examples/         example consumers (bash-agent, cjs-consumer, website)
 
 ## Working in the repo
 
-[CONTRIBUTING.md](./CONTRIBUTING.md) documents how to set up the repository, build and test the packages, and the requirements a change must satisfy.
-
-Per-package scripts run with `pnpm --filter <name> <script>`, for example `pnpm --filter just-bash test:wasm`.
+See the [contributing guide](./CONTRIBUTING.md) for setting up the repository, building and testing the packages, and the requirements a change must satisfy.

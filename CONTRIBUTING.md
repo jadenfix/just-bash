@@ -12,7 +12,7 @@ pnpm build     # required before anything reads dist/
 pnpm test:run  # unit, comparison, and spec tests
 ```
 
-These commands run from the repository root, where each script delegates to the packages. Test paths are relative to the package that owns them, so testing a single file needs a package filter:
+These commands run from the repository root, where each script delegates to the packages. A single package's script runs with `pnpm --filter <name> <script>`, and test paths are relative to the package that owns them, so a single test file needs the filter too:
 
 ```sh
 pnpm test:unit          # fast unit tests
