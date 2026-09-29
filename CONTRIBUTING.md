@@ -142,11 +142,10 @@ Topic labels group related issues, so it is easy to see which issues belong to t
 | `filesystem` | Filesystem implementations, mounts, links, and file operations |
 | `security` | Sandbox boundaries, trust, and vulnerability reports |
 | `compatibility` | Running or bundling just-bash in browsers, Node.js, Bun, and other hosts |
+| `api` | Programmatic interfaces for embedding just-bash: configuration, callbacks, and execution results |
 | `network` | HTTP behavior, network permissions, and request configuration |
 | `dependencies` | Dependency updates and dependency-related problems |
 | `ci` | Automated checks and GitHub Actions |
-
-A bug report that does not include a way to reproduce it is labeled `needs reproduction` during triage. That makes it clear which reports are blocked on the reporter rather than on a fix.
 
 ### Closing issues
 
