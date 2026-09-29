@@ -20,7 +20,7 @@ pnpm test:comparison    # recorded bash fixtures
 pnpm test:wasm          # python3, sqlite3, js-exec
 pnpm test:dist          # smoke-test the built package (after pnpm build)
 pnpm typecheck
-pnpm lint
+pnpm lint               # biome, per-package banned-pattern checks, and workflow security checks
 pnpm knip
 
 pnpm --filter just-bash test:run src/commands/grep/grep.basic.test.ts  # a single test file
