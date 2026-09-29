@@ -2,206 +2,98 @@
 
 This file provides guidance to coding agents working with the code in this repository.
 
-## Project Overview
+just-bash is a TypeScript implementation of a bash interpreter with an in-memory virtual filesystem. It gives AI agents a secure, sandboxed bash environment.
 
-just-bash is a TypeScript implementation of a bash interpreter with an in-memory virtual filesystem. Designed for AI agents needing a secure, sandboxed bash environment. No WASM dependencies allowed.
+Setup, build, test, lint, and release commands live in [CONTRIBUTING.md](./CONTRIBUTING.md). Package conventions, the full prototype-pollution rules, and the test layout live in [packages/just-bash/AGENTS.md](./packages/just-bash/AGENTS.md).
 
-## Commands
+## Running just-bash
 
-Setup, build, test, lint, and typecheck commands are documented in [CONTRIBUTING.md](./CONTRIBUTING.md#setting-up).
+- `pnpm shell` opens an interactive sandboxed shell. Network access is disabled by default; pass `--network` to enable it.
+- `pnpm dev:exec` executes a script from stdin while developing; see [Debugging](#debugging).
+
+### Sandboxed CLI
+
+`packages/just-bash` ships a `just-bash` CLI that mounts a real directory through OverlayFS. Run it from `packages/just-bash` after `pnpm build`:
 
 ```bash
-# Interactive shell
-pnpm shell                 # Full network access
-pnpm shell --no-network    # No network
-
-# Sandboxed CLI (read-only by default)
-node ./dist/cli/just-bash.js -c 'ls -la' --root .
-node ./dist/cli/just-bash.js -c 'cat package.json' --root .
-node ./dist/cli/just-bash.js -c 'grep -r "TODO" src/' --root .
+node ./dist/cli/just-bash.js -c 'ls -la' --root .                        # Run a command
+node ./dist/cli/just-bash.js -c 'cat package.json' --root . --json       # Output as JSON
+node ./dist/cli/just-bash.js script.sh --root .                          # Run a script file
+node ./dist/cli/just-bash.js -e -c 'false; echo "not reached"' --root .  # Exit on the first failure
+node ./dist/cli/just-bash.js -c 'echo hi > /tmp/f' --root . --allow-write
 ```
 
-### Sandboxed Shell Execution with `just-bash`
+The sandbox is read-only by default, and writes stay in memory instead of reaching the real filesystem.
 
-The `just-bash` CLI provides a secure, sandboxed bash environment using OverlayFS:
+| Option | Meaning |
+| --- | --- |
+| `--root <path>` | Directory mounted at `/home/user/project` in the sandbox (default: current directory) |
+| `--cwd <path>` | Working directory in the sandbox (default: the mount point) |
+| `--allow-write` | Allow write operations, in memory only |
+| `--json` | Output results as JSON (stdout, stderr, exitCode) |
+| `-e, --errexit` | Exit on the first failing command |
 
-```bash
-# Execute inline script (read-only by default)
-node ./dist/cli/just-bash.js -c 'ls -la && cat README.md | head -5' --root .
+## Debugging
 
-# Execute with JSON output
-node ./dist/cli/just-bash.js -c 'echo hello' --root . --json
-
-# Allow writes (writes stay in memory, don't affect real filesystem)
-node ./dist/cli/just-bash.js -c 'echo test > /tmp/file.txt && cat /tmp/file.txt' --root . --allow-write
-
-# Execute script file
-node ./dist/cli/just-bash.js script.sh --root .
-
-# Exit on first error
-node ./dist/cli/just-bash.js -e -c 'false; echo "not reached"' --root .
-```
-
-Options:
-- `--root <path>` - Root directory (default: current directory)
-- `--cwd <path>` - Working directory in sandbox (default: /home/user/project)
-- `--allow-write` - Enable write operations (writes stay in memory)
-- `--json` - Output as JSON (stdout, stderr, exitCode)
-- `-e, --errexit` - Exit on first error
-
-### Debug with `pnpm dev:exec`
-
-Reads script from stdin, executes it, shows output. Prefer this over ad-hoc test files.
+`pnpm dev:exec` reads a script from stdin, executes it, and prints the result. Prefer it over ad-hoc test scripts, which need a one-off approval each time.
 
 ```bash
-# Basic execution
 echo 'echo hello' | pnpm dev:exec
-
-# Compare with real bash
-echo 'x=5; echo $((x + 3))' | pnpm dev:exec --real-bash
-
-# Show parsed AST
-echo 'for i in 1 2 3; do echo $i; done' | pnpm dev:exec --print-ast
-
-# Multi-line script
-echo 'arr=(a b c)
-for x in "${arr[@]}"; do
-  echo "item: $x"
-done' | pnpm dev:exec --real-bash
+echo 'x=5; echo $((x + 3))' | pnpm dev:exec --real-bash             # also run the system bash and compare
+echo 'for i in 1 2 3; do echo $i; done' | pnpm dev:exec --print-ast # print the parsed AST
 ```
+
+It also accepts `--root <path>` to execute against a real directory, and `--no-limit` for large scripts.
 
 ## Architecture
 
-### Core Pipeline
+Paths in this section are relative to `packages/just-bash/`.
 
 ```
 Input Script → Parser (src/parser/) → AST (src/ast/) → Interpreter (src/interpreter/) → ExecResult
 ```
 
-### Key Modules
+| Path | Responsibility |
+| --- | --- |
+| `src/parser/` | Recursive descent parser producing AST nodes. `lexer.ts` tokenizes bash syntax (heredocs, quotes, expansions); `expansion-parser.ts` and `compound-parser.ts` handle expansions and compound commands. |
+| `src/interpreter/` | AST execution. `interpreter.ts` holds the execution loop and command dispatch, alongside word expansion, arithmetic, conditionals, control flow, and `builtins/`. |
+| `src/commands/` | One directory per command, holding its implementation and its tests. Commands are registered in `registry.ts`. |
+| `src/fs/` | Virtual filesystem: `overlay-fs/`, `read-write-fs/`, `in-memory-fs/`, `mountable-fs/`, and the shared `real-fs-utils.ts` security helpers. |
+| `src/commands/awk/` | AWK interpreter. User-defined functions support a single return expression only. |
+| `src/commands/sed/` | Stream editor, with addresses, ranges, and extended regex. |
+| `src/commands/python3/` | CPython compiled to WebAssembly, running in a worker thread. |
+| `src/commands/js-exec/` | Sandboxed JavaScript and TypeScript runtime built on QuickJS. |
 
-**Parser** (`src/parser/`): Recursive descent parser producing AST nodes
+## Security invariants
 
-- `lexer.ts` - Tokenizer with bash-specific handling (heredocs, quotes, expansions)
-- `parser.ts` - Main parser orchestrating specialized sub-parsers
-- `expansion-parser.ts` - Parameter expansion, command substitution parsing
-- `compound-parser.ts` - if/for/while/case/function parsing
+[THREAT_MODEL.md](./THREAT_MODEL.md) is the authoritative document. It covers the trust boundaries, the Python execution surface, and the residual risks that are accepted rather than fixed.
 
-**Interpreter** (`src/interpreter/`): AST execution engine
+### Default-deny symlinks
 
-- `interpreter.ts` - Main execution loop, command dispatch
-- `expansion.ts` - Word expansion (parameter, brace, glob, tilde, command substitution)
-- `arithmetic.ts` - `$((...))` and `((...))` evaluation
-- `conditionals.ts` - `[[ ]]` and `[ ]` test evaluation
-- `control-flow.ts` - Loops and conditionals execution
-- `builtins/` - Shell builtins (export, local, declare, read, etc.)
+`OverlayFs` and `ReadWriteFs` default to `allowSymlinks: false`, so `symlink()` throws `EPERM`, any path that traverses a real-filesystem symlink is rejected, and `readdir()` lists symlink entries that cannot be used. `lstat()` and `readlink()` still inspect a symlink without following it.
 
-**Commands** (`src/commands/`): External command implementations
+Validation is central. `src/fs/real-fs-utils.ts` holds the gates (`validateRealPath`, `resolveCanonicalPath`, `resolveCanonicalPathNoSymlinks`), and each class wraps them (`resolveAndValidate` in ReadWriteFs, `resolveRealPath_` in OverlayFs). A gate canonicalizes the path, checks that it is still inside the canonical root, and returns it for the caller to use for I/O. A path that traverses a symlink fails that comparison, which costs no extra I/O.
 
-- Each command in its own directory with implementation + tests
-- Registry pattern via `registry.ts`
+When you add a filesystem method, route real-filesystem access through those gates. Never call `fs.promises.stat()`, `fs.realpathSync()`, or similar on an unvalidated path, and for data I/O prefer `fs.promises.open()` over `fs.promises.readFile()`/`writeFile()`. ReadWriteFs opens data I/O with `O_NOFOLLOW` and re-validates after `mkdir()`, which closes the window between validation and use. A method that goes through a gate inherits that protection automatically.
 
-**Filesystem** (`src/fs.ts`, `src/overlay-fs/`): In-memory VFS with optional overlay on real filesystem
+In tests, pass `allowSymlinks: true` to the constructor when testing symlink behavior. `src/fs/cross-fs-no-symlinks.test.ts` covers the default-deny behavior and the `O_NOFOLLOW` protection.
 
-- `real-fs-utils.ts` - Shared security helpers for real-FS-backed implementations
-- `OverlayFs` / `ReadWriteFs` - Both default to `allowSymlinks: false` (symlinks blocked)
-- Symlink policy is enforced at central gate functions (`resolveAndValidate`, `validateRealPath_`) so new methods get protection automatically
-- Pass `allowSymlinks: true` only when symlink support is explicitly needed
+### Prototype pollution
 
-**AWK** (`src/commands/awk/`): AWK text processing implementation
+User-controlled data (stdin, arguments, file contents, HTTP headers, environment variables) can become JavaScript object keys, so every `Record<string, T>` needs a null prototype. `pnpm lint:banned` enforces it.
 
-- `parser.ts` - Parses AWK programs (BEGIN/END blocks, rules, user-defined functions)
-- `executor.ts` - Executes parsed AWK programs line by line
-- `expressions.ts` - Expression evaluation (arithmetic, string functions, comparisons)
-- Supports: field splitting, pattern matching, printf, gsub/sub/split, user-defined functions
-- Limitations: User-defined functions support single return expressions only (no multi-statement bodies or if/else)
+- Static lookup tables: `nullPrototype()` from `src/commands/query-engine/safe-object.ts`.
+- Empty accumulators: `Object.create(null)`.
+- Bundled workers, which cannot import `safe-object`: `Object.assign(Object.create(null) as Record<string, string>, { ... })`.
+- Self-referential types, where `Object.assign` breaks inference: `Object.setPrototypeOf(map, null)`, with a `@banned-pattern-ignore` comment on the line above it.
 
-**SED** (`src/commands/sed/`): Stream editor implementation
+Never read `obj[userInput]` on a plain `{}`. Guard with `Object.hasOwn()`, or store the data in a `Map` or a null-prototype object. `packages/just-bash/AGENTS.md` lists the remaining helpers (`safeSet`, `nullPrototypeCopy`, `nullPrototypeMerge`) and the tests to add.
 
-- `parser.ts` - Parses sed commands and addresses
-- `executor.ts` - Executes sed commands with pattern/hold space
-- Supports: s, d, p, q, n, a, i, c, y, =, addresses, ranges, extended regex (-E/-r)
-- Has execution limits to prevent runaway compute
+## Constraints
 
-**Python** (`src/commands/python3/`): CPython compiled to WebAssembly via Emscripten
-
-- `python3.ts` - Command entry point, arg parsing, worker lifecycle, timeout with worker termination
-- `worker.ts` - Worker thread: loads CPython WASM, HOSTFS/HTTPFS bridges, defense-in-depth
-- `sync-fs-backend.ts` / `protocol.ts` - SharedArrayBuffer protocol for sync FS calls from WASM
-- `fs-bridge-handler.ts` - Main thread: processes FS requests from worker
-- Security: isolation by construction (no JS bridge, no ctypes, no dlopen, no NODEFS)
-- Defense-in-depth: `Module._load` blocking at file scope (before WASM loads), `WorkerDefenseInDepth` after
-- WASM binary at `vendor/cpython-emscripten/` — `python.cjs` has `__emscripten_system` patched to return -1
-- `-m MODULE` names are validated with `/^[a-zA-Z_][a-zA-Z0-9_.]*$/` to prevent code injection
-- Worker is terminated on timeout via `workerRef` pattern
-- WASM memory capped at 512MB (`-sMAXIMUM_MEMORY=536870912`)
-- Tests: `pnpm test:wasm` (excluded from `pnpm test:unit` by default due to WASM load time)
-
-## Filesystem Security: Default-Deny Symlinks
-
-`OverlayFs` and `ReadWriteFs` default to `allowSymlinks: false`. This means:
-
-- `symlink()` throws EPERM
-- Any path traversing a real-FS symlink is rejected (ENOENT/EACCES)
-- `lstat()` and `readlink()` still work on symlinks (they inspect without following)
-- `readdir()` lists symlink entries but operations through them fail
-
-**How it works**: Central gate functions (`resolveAndValidate` in ReadWriteFs, `validateRealPath_` in OverlayFs) compare `realPath.slice(root.length)` vs `canonical.slice(canonicalRoot.length)`. A mismatch means a symlink was traversed — zero extra I/O cost.
-
-**TOCTOU protection**: `readFile`, `writeFile`, and `appendFile` in ReadWriteFs use `O_NOFOLLOW` (when `allowSymlinks: false`) to prevent symlink-swap attacks between validation and I/O. `writeFile`/`appendFile` also re-validate paths after `mkdir()` to catch parent-directory-swap attacks.
-
-**When adding new FS methods**: Route all real-FS access through the existing gates. Never call `fs.promises.stat()`, `fs.realpathSync()`, or similar directly on unvalidated paths. For data I/O (read/write), prefer `fs.promises.open()` with `O_NOFOLLOW` over `fs.promises.readFile()`/`writeFile()` to close TOCTOU gaps. The gate-based design means any method that goes through the gate is automatically protected.
-
-**In tests**: Pass `allowSymlinks: true` to the constructor when testing symlink behavior. The `cross-fs-no-symlinks.test.ts` file tests the default-deny behavior and O_NOFOLLOW TOCTOU protection.
-
-## Prototype Pollution Prevention
-
-All `Record<string, T>` objects must use null prototypes to prevent `__proto__` lookups from traversing the prototype chain. This is enforced by the banned-patterns linter (`pnpm lint:banned`).
-
-**For static lookup tables**, use `nullPrototype()` from `src/commands/query-engine/safe-object.ts`:
-
-```typescript
-import { nullPrototype } from "../query-engine/safe-object.js";
-const COLORS = nullPrototype<Record<string, string>>({ red: "#f00", blue: "#00f" });
-```
-
-**For empty accumulators**, use `Object.create(null)`:
-
-```typescript
-const map: Record<string, string> = Object.create(null);
-```
-
-**For bundled workers** (can't import safe-object), use inline pattern:
-
-```typescript
-const TABLE: Record<string, string> = Object.assign(
-  Object.create(null) as Record<string, string>,
-  { key: "value" },
-);
-```
-
-**For self-referential types** (where `Object.assign` breaks type inference), use `Object.setPrototypeOf` with a `@banned-pattern-ignore` comment:
-
-```typescript
-// @banned-pattern-ignore: prototype nulled below; self-referential type prevents Object.assign pattern
-const MAP: Record<string, Fn> = { ... };
-// @banned-pattern-ignore: defense-in-depth null-prototype for static lookup table
-Object.setPrototypeOf(MAP, null);
-```
-
-**Always guard bracket access** with `Object.hasOwn()` or use `nullPrototype` objects — never do `obj[userInput]` on a plain `{}`.
-
-## Development Guidelines
-
-- Read [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution conventions: setup, test commands, adding a command, verification steps, and commits
-- Read `packages/just-bash/AGENTS.md` for package-level conventions
-- Use `pnpm dev:exec` instead of ad-hoc test scripts (avoids approval prompts)
-- Dependencies using WASM are not allowed (exception: sql.js for SQLite, approved for security sandboxing)
-- We explicitly don't support 64-bit integers
-- All parsing/execution must have reasonable limits to prevent runaway compute
-
-## Repository Maintenance
-
-Repository maintenance covers dependency updates, CI, tooling, and internal changes that do not alter how just-bash behaves for users. These are tracked as issues labeled `chore`.
-
-[CONTRIBUTING.md](./CONTRIBUTING.md) documents the issue forms, the label taxonomy, and the release process. Read it before filing maintenance work or triaging issues.
+- No dependency may use WebAssembly (exception: `sql.js` for SQLite, approved for security sandboxing). Binary npm packages are fine.
+- 64-bit integers are explicitly unsupported.
+- Parsing and execution must never hang, so every path needs a reasonable compute limit.
+- Install dependencies with `pnpm` rather than editing `package.json` by hand.
+- Prefer a comparison or unit test over an ad-hoc script when the behavior of a bash script or an API is unclear.
+- Biome rules often share their names with ESLint rules.
