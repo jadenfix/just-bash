@@ -636,6 +636,7 @@ Options:
 - `-c <script>` - Execute script from argument
 - `--root <path>` - Root directory (default: current directory)
 - `--cwd <path>` - Working directory in sandbox
+- `--allow-write` - Allow write operations (in memory only; read-only by default)
 - `-e, --errexit` - Exit on first error
 - `--json` - Output as JSON
 
@@ -645,10 +646,10 @@ Options:
 pnpm shell
 ```
 
-The interactive shell has full internet access by default. Disable with `--no-network`:
+The interactive shell has network access disabled by default. Enable it with `--network`:
 
 ```bash
-pnpm shell --no-network
+pnpm shell --network
 ```
 
 ## Execution Protection
