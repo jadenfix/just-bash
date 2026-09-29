@@ -80,7 +80,7 @@ Each issue form applies one type label automatically.
 | `documentation` | Documentation needs a correction or an addition |
 | `chore` | Repository maintenance: dependencies, tooling, CI, or internal work |
 
-GitHub's standard labels (`duplicate`, `invalid`, `question`, `wontfix`, `good first issue`, `help wanted`) are also in use for triage.
+GitHub's other standard labels (`invalid`, `question`, `good first issue`, `help wanted`) are also in use for triage.
 
 Topic labels group related issues, so it is easy to see which issues belong to the same area of the project. They are additive: an issue can have several, and a change that spans areas can have several. Maintainers add them during triage, so you do not need to add them yourself.
 
@@ -94,6 +94,15 @@ Topic labels group related issues, so it is easy to see which issues belong to t
 | `network` | HTTP behavior, network permissions, and request configuration |
 | `dependencies` | Dependency updates and dependency-related problems |
 | `ci` | Automated checks and GitHub Actions |
+
+### Closing issues
+
+Add one of these only when it applies:
+
+- `duplicate` — another issue or pull request already covers it. Link that item.
+- `wontfix` — the change will not be made. Give a short reason.
+
+Fixed work needs no closure label, so link the pull request that fixes it instead. For anything else, close the issue as **Not planned** with a short explanation.
 
 ### Releases
 
