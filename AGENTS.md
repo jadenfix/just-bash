@@ -8,30 +8,9 @@ just-bash is a TypeScript implementation of a bash interpreter with an in-memory
 
 ## Commands
 
+Setup, build, test, lint, and typecheck commands are documented in [CONTRIBUTING.md](./CONTRIBUTING.md#setting-up).
+
 ```bash
-# Build & Lint
-pnpm build                 # Build TypeScript (required before using dist/)
-pnpm typecheck             # Type check
-pnpm lint:fix              # Fix lint errors (biome)
-pnpm knip                  # Check for unused exports/dependencies
-
-# Testing
-pnpm test:run              # Run ALL tests (including spec tests)
-pnpm test:unit             # Run unit tests only (fast, no comparison/spec)
-pnpm test:comparison       # Run comparison tests only (uses fixtures)
-pnpm test:comparison:record # Re-record comparison test fixtures
-pnpm test:wasm             # Run WASM tests (python3, sqlite3, js-exec)
-
-# Excluding spec tests (spec tests have known failures)
-pnpm test:run --exclude src/spec-tests
-
-# Run specific test file
-pnpm test:run src/commands/grep/grep.basic.test.ts
-
-# Run specific spec test file by name pattern
-pnpm test:run src/spec-tests/spec.test.ts -t "arith.test.sh"
-pnpm test:run src/spec-tests/spec.test.ts -t "array-basic.test.sh"
-
 # Interactive shell
 pnpm shell                 # Full network access
 pnpm shell --no-network    # No network
@@ -158,44 +137,6 @@ Input Script → Parser (src/parser/) → AST (src/ast/) → Interpreter (src/in
 - WASM memory capped at 512MB (`-sMAXIMUM_MEMORY=536870912`)
 - Tests: `pnpm test:wasm` (excluded from `pnpm test:unit` by default due to WASM load time)
 
-### Adding Commands
-
-Commands go in `src/commands/<name>/` with:
-
-1. Implementation file with usage statement
-2. Unit tests (collocated `*.test.ts`)
-3. Error on unknown options (unless real bash ignores them)
-4. Comparison tests in `src/comparison-tests/` for behavior validation
-
-### Testing Strategy
-
-- **Unit tests**: Fast, isolated tests for specific functionality
-- **Comparison tests**: Compare just-bash output against recorded bash fixtures (see `src/comparison-tests/README.md`)
-- **Spec tests** (`src/spec-tests/`): Bash specification conformance (may have known failures)
-
-Prefer comparison tests when uncertain about bash behavior. Keep test files under 300 lines.
-
-### Comparison Tests (Fixture System)
-
-Comparison tests use pre-recorded bash outputs stored in `src/comparison-tests/fixtures/`. This eliminates platform differences (macOS vs Linux). See `src/comparison-tests/README.md` for details.
-
-```bash
-# Run comparison tests (uses fixtures, no real bash needed)
-pnpm test:comparison
-
-# Re-record fixtures (skips locked fixtures)
-RECORD_FIXTURES=1 pnpm test:run src/comparison-tests/mytest.comparison.test.ts
-
-# Force re-record including locked fixtures
-RECORD_FIXTURES=force pnpm test:comparison
-```
-
-When adding comparison tests:
-1. Write the test using `setupFiles()` and `compareOutputs()`
-2. Run with `RECORD_FIXTURES=1` to generate fixtures
-3. Commit both the test file and the generated fixture JSON
-4. If manually adjusting for Linux behavior, add `"locked": true` to the fixture
-
 ## Filesystem Security: Default-Deny Symlinks
 
 `OverlayFs` and `ReadWriteFs` default to `allowSymlinks: false`. This means:
@@ -252,11 +193,9 @@ Object.setPrototypeOf(MAP, null);
 
 ## Development Guidelines
 
+- Read [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution conventions: setup, test commands, adding a command, verification steps, and commits
 - Read `packages/just-bash/AGENTS.md` for package-level conventions
 - Use `pnpm dev:exec` instead of ad-hoc test scripts (avoids approval prompts)
-- Always verify with `pnpm typecheck && pnpm lint:fix && pnpm knip && pnpm test:run` before finishing
-- Assert full stdout/stderr in tests, not partial matches
-- Implementation must match real bash behavior, not convenience
 - Dependencies using WASM are not allowed (exception: sql.js for SQLite, approved for security sandboxing)
 - We explicitly don't support 64-bit integers
 - All parsing/execution must have reasonable limits to prevent runaway compute

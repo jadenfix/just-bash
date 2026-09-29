@@ -8,20 +8,25 @@ just-bash is a pnpm monorepo. It requires Node.js `>=20.19` and pnpm.
 
 ```sh
 pnpm install
-pnpm build
-pnpm test:run
+pnpm build     # required before anything reads dist/
+pnpm test:run  # unit, comparison, and spec tests
 ```
 
 Focused checks:
 
 ```sh
-pnpm test:unit   # fast unit tests, no comparison or spec tests
+pnpm test:unit                                       # fast unit tests
+pnpm test:run src/commands/grep/grep.basic.test.ts   # a single test file
+pnpm test:comparison                                 # recorded bash fixtures
+pnpm test:wasm                                       # python3, sqlite3, js-exec
 pnpm typecheck
 pnpm lint
 pnpm knip
 ```
 
-`packages/just-bash` is the published package. Its architecture, the layout of commands, and the testing strategy are documented in [AGENTS.md](./AGENTS.md).
+Spec tests have known failures, so exclude them when you want a clean run: `pnpm test:run --exclude src/spec-tests`.
+
+`packages/just-bash` is the published package. Its architecture, the layout of commands, and the security model are documented in [AGENTS.md](./AGENTS.md).
 
 ## Reporting an issue
 
@@ -40,9 +45,40 @@ A bug report is easiest to act on when it shows a small script, how you run it, 
 
 ## Making a change
 
-Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Run the tests, lint, and typecheck that cover your change before opening a pull request, and add a [changeset](https://changesets.dev/) for behavior changes so the release includes them.
+The implementation must match real bash, not what is convenient for TypeScript. A command that behaves differently from bash is a bug, so check real bash whenever you are unsure.
 
-Behavior is validated against real bash, so a command or interpreter change usually needs a comparison test. [AGENTS.md](./AGENTS.md) explains how to record one.
+### Adding a command
+
+Commands live in `packages/just-bash/src/commands/<name>/`:
+
+1. An implementation file with a usage statement.
+2. Unit tests in a collocated `*.test.ts` file.
+3. Comparison tests in `src/comparison-tests/` when the behavior is uncertain.
+
+Commands error on unknown options unless real bash also ignores them, and `--help` reflects what the command actually supports rather than what bash prints.
+
+### Testing
+
+- **Unit tests** are fast and isolated, so edge cases belong here.
+- **Comparison tests** compare output against recorded bash fixtures, which removes the differences between macOS and Linux. Add them for major command functionality and whenever you are unsure about bash behavior. Write them with `setupFiles()` and `compareOutputs()`; see [`packages/just-bash/src/comparison-tests/README.md`](./packages/just-bash/src/comparison-tests/README.md).
+- **Spec tests** cover bash specification conformance and include known failures.
+
+Assert the full stdout and stderr rather than matching fragments, because a partial match hides the surrounding behavior. Keep test files under 300 lines, and start a new file when you need another group.
+
+To record fixtures:
+
+```sh
+RECORD_FIXTURES=1 pnpm test:run src/comparison-tests/mytest.comparison.test.ts
+RECORD_FIXTURES=force pnpm test:comparison
+```
+
+Commit the generated fixture file together with the test. If you adjust a fixture for Linux behavior, mark it `"locked": true`.
+
+Before finishing, run `pnpm typecheck && pnpm lint:fix && pnpm knip && pnpm test:run`.
+
+### Commits
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Whether a change ships is a separate decision; see [Releases](#releases).
 
 ## Repo maintenance
 
@@ -52,14 +88,12 @@ Repository maintenance covers dependencies, CI, tooling, and internal work that 
 
 Each issue form applies one type label automatically.
 
-| Label | Meaning | Commit type |
-| --- | --- | --- |
-| `bug` | Existing behavior is wrong | `fix:` |
-| `enhancement` | A capability is missing, or should work differently | `feat:` |
-| `documentation` | Documentation needs a correction or an addition | `docs:` |
-| `chore` | Repository maintenance: dependencies, tooling, CI, or internal work | `chore:` |
-
-The commit type column shows the Conventional Commits type that usually fixes the issue. There is deliberately no label for every commit type: a `chore` issue can be fixed with a `ci:`, `build:`, `test:`, `refactor:`, or `perf:` commit when one of those is more accurate.
+| Label | Meaning |
+| --- | --- |
+| `bug` | Existing behavior is wrong |
+| `enhancement` | A capability is missing, or should work differently |
+| `documentation` | Documentation needs a correction or an addition |
+| `chore` | Repository maintenance: dependencies, tooling, CI, or internal work |
 
 GitHub's standard labels (`duplicate`, `invalid`, `question`, `wontfix`, `good first issue`, `help wanted`) are also in use for triage.
 
@@ -78,4 +112,4 @@ Topic labels group related issues, so it is easy to see which issues belong to t
 
 ### Releases
 
-Releases are managed with [changesets](https://changesets.dev/). Changesets decide what ships and how versions move, so a commit type does not trigger a release on its own: a change ships when it has a changeset.
+This repository uses [Changesets](https://changesets.dev/guide/getting-started), so commit types do not trigger releases. Only add a changeset when you intend to release the change, and be deliberate about why package users need that release. Add one with `pnpm changeset`.
