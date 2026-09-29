@@ -131,7 +131,7 @@ Each issue form applies one type label automatically.
 | `documentation` | Documentation needs a correction or an addition |
 | `chore` | Repository maintenance: dependencies, tooling, CI, or internal work |
 
-GitHub's other standard labels (`invalid`, `question`, `good first issue`, `help wanted`) are also in use for triage.
+GitHub's `good first issue` and `help wanted` labels are also in use for triage.
 
 Topic labels group related issues, so it is easy to see which issues belong to the same area of the project. They are additive: an issue can have several, and a change that spans areas can have several. Maintainers add them during triage, so you do not need to add them yourself.
 
@@ -145,6 +145,8 @@ Topic labels group related issues, so it is easy to see which issues belong to t
 | `network` | HTTP behavior, network permissions, and request configuration |
 | `dependencies` | Dependency updates and dependency-related problems |
 | `ci` | Automated checks and GitHub Actions |
+
+A bug report that does not include a way to reproduce it is labeled `needs reproduction` during triage. That makes it clear which reports are blocked on the reporter rather than on a fix.
 
 ### Closing issues
 
