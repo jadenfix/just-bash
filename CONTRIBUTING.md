@@ -99,8 +99,8 @@ Topic labels group related issues, so it is easy to see which issues belong to t
 
 Add one of these only when it applies:
 
-- `duplicate` — another issue or pull request already covers it. Link that item.
-- `wontfix` — the change will not be made. Give a short reason.
+- `duplicate`: another issue or pull request already covers it. Link that item.
+- `wontfix`: the change will not be made. Give a short reason.
 
 Fixed work needs no closure label, so link the pull request that fixes it instead. For anything else, close the issue as **Not planned** with a short explanation.
 
