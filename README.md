@@ -27,14 +27,6 @@ examples/         example consumers (bash-agent, cjs-consumer, website)
 
 ## Working in the repo
 
-```bash
-pnpm install              # install all workspace deps
-pnpm build                # build all packages
-pnpm test:run             # run unit + comparison tests
-pnpm test:dist            # smoke-test the bundled output
-pnpm lint                 # biome + per-package banned-pattern checks
-pnpm typecheck            # tsc across all packages
-```
+[CONTRIBUTING.md](./CONTRIBUTING.md) documents how to set up the repository, build and test the packages, and the requirements a change must satisfy.
 
-Per-package commands run via `pnpm --filter <name> <script>` — e.g.
-`pnpm --filter just-bash test:wasm`.
+Per-package scripts run with `pnpm --filter <name> <script>`, for example `pnpm --filter just-bash test:wasm`.

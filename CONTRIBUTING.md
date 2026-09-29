@@ -18,6 +18,7 @@ These commands run from the repository root, where each script delegates to the 
 pnpm test:unit          # fast unit tests
 pnpm test:comparison    # recorded bash fixtures
 pnpm test:wasm          # python3, sqlite3, js-exec
+pnpm test:dist          # smoke-test the built package (after pnpm build)
 pnpm typecheck
 pnpm lint
 pnpm knip
