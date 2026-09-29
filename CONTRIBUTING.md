@@ -53,8 +53,8 @@ Assert the full stdout and stderr rather than matching fragments, because a part
 To record fixtures:
 
 ```sh
-RECORD_FIXTURES=1 pnpm test:run src/comparison-tests/mytest.comparison.test.ts
-RECORD_FIXTURES=force pnpm test:comparison
+RECORD_FIXTURES=1 pnpm test:run src/comparison-tests/mytest.comparison.test.ts  # re-record one file
+RECORD_FIXTURES=force pnpm test:comparison  # re-record everything, overwriting locked fixtures too
 ```
 
 Commit the generated fixture file together with the test. If you adjust a fixture for Linux behavior, mark it `"locked": true`.
@@ -102,7 +102,7 @@ Add one of these only when it applies:
 - `duplicate`: another issue or pull request already covers it. Link that item.
 - `wontfix`: the change will not be made. Give a short reason.
 
-Fixed work needs no closure label, so link the pull request that fixes it instead. For anything else, close the issue as **Not planned** with a short explanation.
+Close resolved issues as **Completed**, and link the fix or explain the resolution. Use **Not planned** when you close without pursuing a change.
 
 ### Releases
 
