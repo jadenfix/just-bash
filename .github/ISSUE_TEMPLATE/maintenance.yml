@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for work that keeps the repository healthy: dependencies, CI, tooling, and internal development. It does not describe a behavior change for users, so it usually needs no changeset.
+        Use this for work that keeps the repository healthy: dependencies, CI, tooling, and internal development. It does not describe a behavior change for users.
   - type: textarea
     id: task
     attributes:
@@ -24,4 +24,4 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: The packages or files involved, and whether users are affected at all.
+      description: The packages or files involved, whether users are affected, and links to failing CI runs, logs, or dependency references when relevant.

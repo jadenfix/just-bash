@@ -6,7 +6,7 @@ body:
     id: location
     attributes:
       label: Location
-      description: A link or file path for the documentation.
+      description: Link the affected page or file. If the documentation is missing, describe where you expected to find it.
       placeholder: https://github.com/vercel-labs/just-bash/blob/main/packages/just-bash/README.md
     validations:
       required: true

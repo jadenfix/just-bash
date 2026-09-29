@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the suggestion. just-bash implements a subset of bash and the standard Unix commands, so linking the real command this should match, or the script that needs it, helps us judge compatibility.
+        Thanks for the suggestion. Describe the task this would enable. For shell or command compatibility, include the behavior to match and a reference when one exists, such as the real command's documentation or `--help` output.
   - type: textarea
     id: problem
     attributes:
