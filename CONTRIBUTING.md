@@ -1,6 +1,6 @@
 # Contributing to just-bash
 
-Thanks for helping improve just-bash. This guide covers the contribution workflow: setting up the repository, making a change, filing an issue, and the maintenance process used to triage what comes in.
+Thanks for helping improve just-bash. This guide covers the contribution workflow: setting up the repository, making a change, and the maintenance process used to triage what comes in.
 
 ## Setting up
 
@@ -27,21 +27,6 @@ pnpm knip
 Spec tests have known failures, so exclude them when you want a clean run: `pnpm test:run --exclude src/spec-tests`.
 
 `packages/just-bash` is the published package. Its architecture, the layout of commands, and the security model are documented in [AGENTS.md](./AGENTS.md).
-
-## Reporting an issue
-
-Pick the form that matches your report when you open a new issue:
-
-| Form | Use it for |
-| --- | --- |
-| Bug report | Behavior that differs from real bash, or that fails unexpectedly |
-| Feature request | A command, flag, or capability that does not exist yet |
-| Documentation issue | Documentation that is wrong, unclear, or missing |
-| Maintenance task | Dependency, tooling, CI, or internal repository work |
-
-Blank issues stay available for anything that does not fit a form.
-
-A bug report is easiest to act on when it shows a small script, how you run it, and what real bash prints for the same script. just-bash targets bash compatibility, so a difference between the two shells is the clearest way to describe a bug.
 
 ## Making a change
 
