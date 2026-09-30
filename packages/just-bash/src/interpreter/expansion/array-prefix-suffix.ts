@@ -47,6 +47,7 @@ export type ExpandWordPartsAsyncFn = (
 /**
  * Handle "${arr[@]:-${default[@]}}" and "${arr[@]:+${alt[@]}}".
  * Also handles "${var:-${default[@]}}" where var is a scalar variable.
+ * Assignment defaults preserve existing array elements when no assignment is needed.
  * When the default value contains an array expansion, each element should become a separate word.
  */
 export async function handleArrayDefaultValue(
@@ -62,7 +63,8 @@ export async function handleArrayDefaultValue(
     dqPart.parts.length !== 1 ||
     dqPart.parts[0].type !== "ParameterExpansion" ||
     (dqPart.parts[0].operation?.type !== "DefaultValue" &&
-      dqPart.parts[0].operation?.type !== "UseAlternative")
+      dqPart.parts[0].operation?.type !== "UseAlternative" &&
+      dqPart.parts[0].operation?.type !== "AssignDefault")
   ) {
     return null;
   }
@@ -70,12 +72,16 @@ export async function handleArrayDefaultValue(
   const paramPart = dqPart.parts[0];
   const op = paramPart.operation as
     | { type: "DefaultValue"; word?: WordNode; checkEmpty?: boolean }
-    | { type: "UseAlternative"; word?: WordNode; checkEmpty?: boolean };
+    | { type: "UseAlternative"; word?: WordNode; checkEmpty?: boolean }
+    | { type: "AssignDefault"; word?: WordNode; checkEmpty?: boolean };
 
   // Check if the outer parameter is an array subscript
   const arrayMatch = paramPart.parameter.match(
     /^([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]$/,
   );
+  if (op.type === "AssignDefault" && !arrayMatch) {
+    return null;
+  }
 
   // Determine if we should use the alternate/default value
   let shouldUseAlternate: boolean;
@@ -135,6 +141,11 @@ export async function handleArrayDefaultValue(
     if (!shouldUseAlternate) {
       return { values: [varValue], quoted: true };
     }
+  }
+
+  // The assignment handler owns validation and evaluation before writing the target.
+  if (op.type === "AssignDefault") {
+    return null;
   }
 
   // We should use the alternate/default value
