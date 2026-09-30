@@ -6,6 +6,7 @@ import {
   setupFiles,
 } from "./fixture-runner.js";
 
+// Assignment fixtures use Bash 5 behavior; Bash 3.2 preserves array argument boundaries.
 describe("assignment defaults containing arrays - GNU Bash Comparison", () => {
   let testDirectory: string;
 
@@ -34,7 +35,7 @@ printf 'again=<%s>\\n' "\${value:=ignored}"`,
     );
   });
 
-  it("uses IFS for assignment while preserving separate arguments", async () => {
+  it("joins array-at defaults with spaces and array-star defaults with IFS", async () => {
     const env = await setupFiles(testDirectory, {});
     await compareOutputs(
       env,

@@ -1009,6 +1009,10 @@ async function expandParameterAsync(
   const value = await getVariable(ctx, parameter, !skipNounset);
 
   if (!operation) {
+    if (inDoubleQuotes && parameter.endsWith("[*]")) {
+      return computeIsEmpty(ctx, parameter, value, inDoubleQuotes)
+        .effectiveValue;
+    }
     return value;
   }
 

@@ -18,7 +18,6 @@ import { createUserRegex } from "../../regex/index.js";
 import { getIfsSeparator } from "../helpers/ifs.js";
 import { escapeRegex } from "../helpers/regex.js";
 import type { InterpreterContext } from "../types.js";
-import { assignDefaultValue } from "./parameter-ops.js";
 import { patternToRegex } from "./pattern.js";
 import { applyPatternRemoval } from "./pattern-removal.js";
 import { getArrayElements, getVariable, isVariableSet } from "./variable.js";
@@ -46,7 +45,7 @@ export type ExpandWordPartsAsyncFn = (
 ) => Promise<string>;
 
 /**
- * Handle "${arr[@]:-${default[@]}}", "${arr[@]:+${alt[@]}}", and "${arr[@]:=default}"
+ * Handle "${arr[@]:-${default[@]}}" and "${arr[@]:+${alt[@]}}".
  * Also handles "${var:-${default[@]}}" where var is a scalar variable.
  * When the default value contains an array expansion, each element should become a separate word.
  */
@@ -63,8 +62,7 @@ export async function handleArrayDefaultValue(
     dqPart.parts.length !== 1 ||
     dqPart.parts[0].type !== "ParameterExpansion" ||
     (dqPart.parts[0].operation?.type !== "DefaultValue" &&
-      dqPart.parts[0].operation?.type !== "UseAlternative" &&
-      dqPart.parts[0].operation?.type !== "AssignDefault")
+      dqPart.parts[0].operation?.type !== "UseAlternative")
   ) {
     return null;
   }
@@ -72,8 +70,7 @@ export async function handleArrayDefaultValue(
   const paramPart = dqPart.parts[0];
   const op = paramPart.operation as
     | { type: "DefaultValue"; word?: WordNode; checkEmpty?: boolean }
-    | { type: "UseAlternative"; word?: WordNode; checkEmpty?: boolean }
-    | { type: "AssignDefault"; word?: WordNode; checkEmpty?: boolean };
+    | { type: "UseAlternative"; word?: WordNode; checkEmpty?: boolean };
 
   // Check if the outer parameter is an array subscript
   const arrayMatch = paramPart.parameter.match(
@@ -161,32 +158,10 @@ export async function handleArrayDefaultValue(
     }
 
     if (defaultArrayName) {
-      // Assignment needs the complete word, so mixed words use normal expansion.
-      if (
-        op.type === "AssignDefault" &&
-        !arrayMatch &&
-        opWordParts.length !== 1
-      ) {
-        return null;
-      }
       // The default word is an array expansion - return its elements
       const defaultElements = getArrayElements(ctx, defaultArrayName);
-      const scalarValue = ctx.state.env.get(defaultArrayName);
-      const values =
-        defaultElements.length > 0
-          ? defaultElements.map(([, value]) => value)
-          : scalarValue !== undefined
-            ? [scalarValue]
-            : [];
-      if (op.type === "AssignDefault" && !arrayMatch) {
-        const separator = getIfsSeparator(ctx.state.env);
-        const defaultValue = values.join(separator);
-        await assignDefaultValue(ctx, paramPart.parameter, defaultValue);
-        if (values.length === 0 || separator === "") {
-          return { values: [defaultValue], quoted: true };
-        }
-      }
-      if (values.length > 0) {
+      if (defaultElements.length > 0) {
+        const values = defaultElements.map(([, v]) => v);
         if (defaultIsStar || outerIsStar) {
           // Join with IFS for [*] subscript
           const ifsSep = getIfsSeparator(ctx.state.env);
@@ -194,6 +169,11 @@ export async function handleArrayDefaultValue(
         }
         // [@] - each element as a separate word
         return { values, quoted: true };
+      }
+      // Default array is empty - check for scalar
+      const scalarValue = ctx.state.env.get(defaultArrayName);
+      if (scalarValue !== undefined) {
+        return { values: [scalarValue], quoted: true };
       }
       // Default is unset
       return { values: [], quoted: true };
