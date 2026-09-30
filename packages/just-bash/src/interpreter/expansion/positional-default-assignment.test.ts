@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { Bash } from "../../Bash.js";
 
 describe("default assignment to positional and special parameters", () => {
+  it("rejects mixed-quote positional defaults before evaluating them", async () => {
+    const bash = new Bash();
+    const result = await bash.exec(`set --
+echo \${1:=$(echo evaluated >&2)"fallback"}
+echo reached`);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("bash: $1: cannot assign in this way\n");
+    expect(result.exitCode).toBe(1);
+  });
+
   it.each([
     "1",
     "12",
