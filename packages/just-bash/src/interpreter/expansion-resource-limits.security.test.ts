@@ -8,6 +8,19 @@ import { ExecutionLimitError } from "./errors.js";
 import { expandBraceRange } from "./expansion/brace-range.js";
 
 describe("interpreter expansion resource limits", () => {
+  it("rejects oversized array defaults before assigning the target", async () => {
+    const bash = new Bash({
+      executionLimits: { maxStringLength: 12 },
+    });
+    const result = await bash.exec(
+      'defaults[0]=éé; defaults[1]=éé; defaults[2]=éé; : "${value:=${defaults[@]}}"',
+    );
+
+    expect(result.exitCode).toBe(ExecutionLimitError.EXIT_CODE);
+    expect(result.stderr).toContain("string limit exceeded (12 bytes)");
+    expect(result.env).not.toHaveProperty("value");
+  });
+
   it("bounds a trailing-space alias chain iteratively", async () => {
     const bash = new Bash({ executionLimits: { maxCallDepth: 3 } });
     const result = await bash.exec(
