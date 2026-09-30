@@ -13,13 +13,6 @@
     "stderr": "",
     "exitCode": 0
   },
-  "41b2c00d875d62cd": {
-    "command": "unset IFS first second third defaults\ndefaults=(one two)\nprintf '<%s>\\n' \"${first:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$first\"\nIFS=\n: \"${second:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$second\"\nunset defaults\ndefaults=scalar\nprintf '<%s>\\n' \"${third:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$third\"",
-    "files": {},
-    "stdout": "<one>\n<two>\nassigned=<one two>\nassigned=<onetwo>\n<scalar>\nassigned=<scalar>\n",
-    "stderr": "",
-    "exitCode": 0
-  },
   "55099cb82f54e942": {
     "command": "unset value star\nIFS=:\ndefaults=('a b' c)\nprintf '<%s>\\n' \"${value=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$value\"\nprintf '<%s>\\n' \"${star:=${defaults[*]}}\"\nprintf 'assigned=<%s>\\n' \"$star\"",
     "files": {},
@@ -31,6 +24,20 @@
     "command": "defaults=(one two)\nunset value\n: \"${value:=pre${defaults[@]}post}\"\nprintf 'assigned=<%s>\\n' \"$value\"",
     "files": {},
     "stdout": "assigned=<preone twopost>\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "88cecfcd1171de69": {
+    "command": "unset IFS first second third defaults\ndefaults=(one two)\nprintf '<%s>\\n' \"${first:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$first\"\nIFS=\nset -- \"${second:=${defaults[@]}}\"\nprintf 'arguments=%s value=<%s>\\n' \"$#\" \"$1\"\nprintf 'assigned=<%s>\\n' \"$second\"\nunset defaults\ndefaults=scalar\nprintf '<%s>\\n' \"${third:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"$third\"",
+    "files": {},
+    "stdout": "<one>\n<two>\nassigned=<one two>\narguments=1 value=<onetwo>\nassigned=<onetwo>\n<scalar>\nassigned=<scalar>\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "affd5c5f67e29e06": {
+    "command": "unset value\ndefaults=()\nset -- \"${value:=${defaults[@]}}\"\nprintf 'arguments=%s value=<%s> assigned=<%s>\\n' \"$#\" \"$1\" \"$value\"",
+    "files": {},
+    "stdout": "arguments=1 value=<> assigned=<>\n",
     "stderr": "",
     "exitCode": 0
   },

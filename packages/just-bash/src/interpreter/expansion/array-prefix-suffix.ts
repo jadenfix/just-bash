@@ -179,11 +179,12 @@ export async function handleArrayDefaultValue(
             ? [scalarValue]
             : [];
       if (op.type === "AssignDefault" && !arrayMatch) {
-        await assignDefaultValue(
-          ctx,
-          paramPart.parameter,
-          values.join(getIfsSeparator(ctx.state.env)),
-        );
+        const separator = getIfsSeparator(ctx.state.env);
+        const defaultValue = values.join(separator);
+        await assignDefaultValue(ctx, paramPart.parameter, defaultValue);
+        if (values.length === 0 || separator === "") {
+          return { values: [defaultValue], quoted: true };
+        }
       }
       if (values.length > 0) {
         if (defaultIsStar || outerIsStar) {

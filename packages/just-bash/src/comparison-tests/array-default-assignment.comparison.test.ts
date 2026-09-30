@@ -98,12 +98,25 @@ defaults=(one two)
 printf '<%s>\\n' "\${first:=\${defaults[@]}}"
 printf 'assigned=<%s>\\n' "$first"
 IFS=
-: "\${second:=\${defaults[@]}}"
+set -- "\${second:=\${defaults[@]}}"
+printf 'arguments=%s value=<%s>\\n' "$#" "$1"
 printf 'assigned=<%s>\\n' "$second"
 unset defaults
 defaults=scalar
 printf '<%s>\\n' "\${third:=\${defaults[@]}}"
 printf 'assigned=<%s>\\n' "$third"`,
+    );
+  });
+
+  it("preserves one empty argument for an assigned empty array", async () => {
+    const env = await setupFiles(testDirectory, {});
+    await compareOutputs(
+      env,
+      testDirectory,
+      `unset value
+defaults=()
+set -- "\${value:=\${defaults[@]}}"
+printf 'arguments=%s value=<%s> assigned=<%s>\\n' "$#" "$1" "$value"`,
     );
   });
 });
