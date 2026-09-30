@@ -10,6 +10,46 @@ import { expandWordWithGlob } from "./expansion.js";
 import type { InterpreterContext } from "./types.js";
 
 describe("interpreter expansion resource limits", () => {
+  it.each([
+    "${#a[@]}",
+    "${#a[*]}",
+    "${a[*]:=fallback}",
+  ])("bounds produced strings without joining array metadata (%s)", async (parameter) => {
+    const ctx = {
+      state: {
+        env: new Map(),
+        arrays: new Map([
+          [
+            "a",
+            {
+              kind: "indexed",
+              elements: new Map([
+                ["0", "abcdefgh"],
+                ["1", "ijklmnop"],
+              ]),
+            },
+          ],
+        ]),
+        options: { nounset: false },
+        shoptOptions: {},
+      },
+      limits: resolveLimits({ maxStringLength: 12 }),
+    } as unknown as InterpreterContext;
+    const ast = new Parser().parse(`: "${parameter}"`);
+    const command = ast.statements[0].pipelines[0]
+      .commands[0] as SimpleCommandNode;
+    if (parameter === "${a[*]:=fallback}") {
+      await expect(expandWordWithGlob(ctx, command.args[0])).rejects.toThrow(
+        "array expansion string limit exceeded (12 bytes)",
+      );
+    } else {
+      expect(await expandWordWithGlob(ctx, command.args[0])).toEqual({
+        values: ["2"],
+        quoted: true,
+      });
+    }
+  });
+
   it("preserves a non-BMP IFS separator in assignment defaults", async () => {
     const bash = new Bash();
     const result = await bash.exec(

@@ -79,7 +79,7 @@ export async function handleArrayDefaultValue(
   const arrayMatch = paramPart.parameter.match(
     /^([a-zA-Z_][a-zA-Z0-9_]*)\[([@*])\]$/,
   );
-  if (op.type === "AssignDefault" && !arrayMatch) {
+  if (op.type === "AssignDefault" && (!arrayMatch || arrayMatch[2] === "*")) {
     return null;
   }
 

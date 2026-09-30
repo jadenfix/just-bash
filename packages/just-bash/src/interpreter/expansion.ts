@@ -1008,6 +1008,14 @@ async function expandParameterAsync(
     }
   }
 
+  // Array counts do not consume the elements' joined contents.
+  if (
+    operation?.type === "Length" &&
+    /^[a-zA-Z_][a-zA-Z0-9_]*\[[@*]\]$/.test(parameter)
+  ) {
+    return handleLength(ctx, parameter, "");
+  }
+
   // Operations that handle unset variables should not trigger nounset
   const skipNounset =
     operation &&
@@ -1016,7 +1024,7 @@ async function expandParameterAsync(
       operation.type === "UseAlternative" ||
       operation.type === "ErrorIfUnset");
 
-  const value = await getVariable(ctx, parameter, !skipNounset, inDoubleQuotes);
+  const value = await getVariable(ctx, parameter, !skipNounset);
 
   if (!operation) {
     return value;

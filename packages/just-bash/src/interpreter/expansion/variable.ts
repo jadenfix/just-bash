@@ -125,7 +125,6 @@ export async function getVariable(
   ctx: InterpreterContext,
   name: string,
   checkNounset = true,
-  insideDoubleQuotes = false,
 ): Promise<string> {
   // Special variables are always defined (never trigger nounset)
   switch (name) {
@@ -274,13 +273,11 @@ export async function getVariable(
     }
 
     if (subscript === "@" || subscript === "*") {
-      // Quoted [*] uses IFS; scalar [@] expansion uses spaces.
+      // Scalar [*] expansion uses IFS; scalar [@] expansion uses spaces.
       const elements = getArrayElements(ctx, arrayName);
       if (elements.length > 0) {
         const separator =
-          subscript === "*" && insideDoubleQuotes
-            ? getIfsSeparator(ctx.state.env)
-            : " ";
+          subscript === "*" ? getIfsSeparator(ctx.state.env) : " ";
         let bytes = utf8ByteLength(separator) * (elements.length - 1);
         for (const [, value] of elements) {
           bytes += utf8ByteLength(value);
@@ -428,7 +425,7 @@ export async function getVariable(
     if (resolved !== name) {
       // Recursively get the target variable's value
       // (this handles if target is also a nameref, array, etc.)
-      return await getVariable(ctx, resolved, checkNounset, insideDoubleQuotes);
+      return await getVariable(ctx, resolved, checkNounset);
     }
     // Nameref points to empty/invalid target
     const value = ctx.state.env.get(name);

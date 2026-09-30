@@ -50,6 +50,30 @@ printf 'assigned=<%s>\\n' "$star"`,
     );
   });
 
+  it("joins unquoted array-star defaults with IFS before splitting", async () => {
+    const env = await setupFiles(testDirectory, {});
+    await compareOutputs(
+      env,
+      testDirectory,
+      `IFS=:
+defaults=('a b' c)
+printf '<%s>\\n' \${value:=\${defaults[*]}}
+printf 'saved=<%s>\\n' "$value"`,
+    );
+  });
+
+  it("preserves existing whole-array values without evaluating defaults", async () => {
+    const env = await setupFiles(testDirectory, {});
+    await compareOutputs(
+      env,
+      testDirectory,
+      `IFS=:
+a=(one two)
+printf '<%s>\\n' "\${a[*]:=$(echo unexpected >&2)}"
+printf '<%s>\\n' "\${a[@]:=$(echo unexpected >&2)}"`,
+    );
+  });
+
   it("assigns empty defaults and respects the empty/unset distinction", async () => {
     const env = await setupFiles(testDirectory, {});
     await compareOutputs(

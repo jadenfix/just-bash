@@ -1,4 +1,11 @@
 {
+  "03b284818ce3a6ef": {
+    "command": "IFS=:\na=(one two)\nprintf '<%s>\\n' \"${a[*]:=$(echo unexpected >&2)}\"\nprintf '<%s>\\n' \"${a[@]:=$(echo unexpected >&2)}\"",
+    "files": {},
+    "stdout": "<one:two>\n<one>\n<two>\n",
+    "stderr": "",
+    "exitCode": 0
+  },
   "2de47c3a86ebf345": {
     "command": "set -u\nunset value\ndefaults=('a b' c)\nprintf '<%s>\\n' \"${value:=${defaults[@]}}\"\nprintf 'assigned=<%s>\\n' \"${value-unset}\"\nprintf 'again=<%s>\\n' \"${value:=ignored}\"",
     "files": {},
@@ -37,6 +44,13 @@
     "stderr": "",
     "exitCode": 0,
     "locked": true
+  },
+  "9aebabb5717546d7": {
+    "command": "IFS=:\ndefaults=('a b' c)\nprintf '<%s>\\n' ${value:=${defaults[*]}}\nprintf 'saved=<%s>\\n' \"$value\"",
+    "files": {},
+    "stdout": "<a b>\n<c>\nsaved=<a b:c>\n",
+    "stderr": "",
+    "exitCode": 0
   },
   "affd5c5f67e29e06": {
     "command": "unset value\ndefaults=()\nset -- \"${value:=${defaults[@]}}\"\nprintf 'arguments=%s value=<%s> assigned=<%s>\\n' \"$#\" \"$1\" \"$value\"",
