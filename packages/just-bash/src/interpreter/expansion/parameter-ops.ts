@@ -123,33 +123,39 @@ export async function handleAssignDefault(
       operation.word.parts,
       opCtx.inDoubleQuotes,
     );
-    // Handle array subscript assignment (e.g., arr[0]=x)
-    const arrayMatch = parameter.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]$/);
-    if (arrayMatch) {
-      const [, arrayName, subscriptExpr] = arrayMatch;
-      // Evaluate subscript as arithmetic expression
-      let index: number;
-      if (/^\d+$/.test(subscriptExpr)) {
-        index = Number.parseInt(subscriptExpr, 10);
-      } else {
-        try {
-          const parser = new Parser();
-          const arithAst = parseArithmeticExpression(parser, subscriptExpr);
-          index = await evaluateArithmetic(ctx, arithAst.expression);
-        } catch {
-          const varValue = ctx.state.env.get(subscriptExpr);
-          index = varValue ? Number.parseInt(varValue, 10) : 0;
-        }
-        if (Number.isNaN(index)) index = 0;
-      }
-      // Set array element
-      setArrayElement(ctx, arrayName, index, defaultValue);
-    } else {
-      ctx.state.env.set(parameter, defaultValue);
-    }
+    await assignDefaultValue(ctx, parameter, defaultValue);
     return defaultValue;
   }
   return opCtx.effectiveValue;
+}
+
+export async function assignDefaultValue(
+  ctx: InterpreterContext,
+  parameter: string,
+  defaultValue: string,
+): Promise<void> {
+  const arrayMatch = parameter.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\[(.+)\]$/);
+  if (!arrayMatch) {
+    ctx.state.env.set(parameter, defaultValue);
+    return;
+  }
+  const [, arrayName, subscriptExpr] = arrayMatch;
+  let index: number;
+  if (/^\d+$/.test(subscriptExpr)) {
+    index = Number.parseInt(subscriptExpr, 10);
+  } else {
+    try {
+      const parser = new Parser();
+      const arithAst = parseArithmeticExpression(parser, subscriptExpr);
+      index = await evaluateArithmetic(ctx, arithAst.expression);
+    } catch {
+      // Preserve the variable-index fallback when arithmetic parsing fails.
+      const varValue = ctx.state.env.get(subscriptExpr);
+      index = varValue ? Number.parseInt(varValue, 10) : 0;
+    }
+    if (Number.isNaN(index)) index = 0;
+  }
+  setArrayElement(ctx, arrayName, index, defaultValue);
 }
 
 /**

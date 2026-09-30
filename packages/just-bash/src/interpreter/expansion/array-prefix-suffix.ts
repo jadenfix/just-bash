@@ -18,6 +18,7 @@ import { createUserRegex } from "../../regex/index.js";
 import { getIfsSeparator } from "../helpers/ifs.js";
 import { escapeRegex } from "../helpers/regex.js";
 import type { InterpreterContext } from "../types.js";
+import { assignDefaultValue } from "./parameter-ops.js";
 import { patternToRegex } from "./pattern.js";
 import { applyPatternRemoval } from "./pattern-removal.js";
 import { getArrayElements, getVariable, isVariableSet } from "./variable.js";
@@ -160,10 +161,31 @@ export async function handleArrayDefaultValue(
     }
 
     if (defaultArrayName) {
+      // Assignment needs the complete word, so mixed words use normal expansion.
+      if (
+        op.type === "AssignDefault" &&
+        !arrayMatch &&
+        opWordParts.length !== 1
+      ) {
+        return null;
+      }
       // The default word is an array expansion - return its elements
       const defaultElements = getArrayElements(ctx, defaultArrayName);
-      if (defaultElements.length > 0) {
-        const values = defaultElements.map(([, v]) => v);
+      const scalarValue = ctx.state.env.get(defaultArrayName);
+      const values =
+        defaultElements.length > 0
+          ? defaultElements.map(([, value]) => value)
+          : scalarValue !== undefined
+            ? [scalarValue]
+            : [];
+      if (op.type === "AssignDefault" && !arrayMatch) {
+        await assignDefaultValue(
+          ctx,
+          paramPart.parameter,
+          values.join(getIfsSeparator(ctx.state.env)),
+        );
+      }
+      if (values.length > 0) {
         if (defaultIsStar || outerIsStar) {
           // Join with IFS for [*] subscript
           const ifsSep = getIfsSeparator(ctx.state.env);
@@ -171,11 +193,6 @@ export async function handleArrayDefaultValue(
         }
         // [@] - each element as a separate word
         return { values, quoted: true };
-      }
-      // Default array is empty - check for scalar
-      const scalarValue = ctx.state.env.get(defaultArrayName);
-      if (scalarValue !== undefined) {
-        return { values: [scalarValue], quoted: true };
       }
       // Default is unset
       return { values: [], quoted: true };
