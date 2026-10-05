@@ -1,5 +1,94 @@
 # just-bash
 
+## 3.6.0
+
+### Minor Changes
+
+- [#377](https://github.com/vercel-labs/just-bash/pull/377) [`cc35fab`](https://github.com/vercel-labs/just-bash/commit/cc35fab4ffdd7498dd45ab6d2247a95b5db551ee) Thanks [@trieloff](https://github.com/trieloff)! - Add the `mktemp` command. It creates a unique temporary file (mode 0600) or directory (`-d`, mode 0700) and prints its path, supporting `-p`/`--tmpdir[=DIR]`, `-t`, `-u`/`--dry-run`, `-q`/`--quiet`, `--suffix=SUFF`, GNU-style `TEMPLATE` expansion, `--help` and `--version`. The default directory is `$TMPDIR` when set and non-empty, otherwise `/tmp`, so sandboxed embedders that point `TMPDIR` at a writable directory get a usable path. Random name characters come from the platform CSPRNG (`crypto.getRandomValues`), and existing paths are never returned.
+
+  Adds an optional `createExclusive(path, { mode, directory })` method to `IFileSystem`, which creates an entry only if the name is free and applies the mode at creation time rather than via a follow-up `chmod`. All built-in filesystems implement it. The member is optional, so external `IFileSystem` implementations remain source compatible; `mktemp` reports that such a filesystem cannot create atomically rather than substituting a non-atomic sequence. The accompanying `CreateExclusiveOptions` type is exported alongside the existing `MkdirOptions`/`RmOptions`.
+
+- [#409](https://github.com/vercel-labs/just-bash/pull/409) [`5d19cc3`](https://github.com/vercel-labs/just-bash/commit/5d19cc373e691f389a2e5c1ba24766b14fb08bad) Thanks [@trieloff](https://github.com/trieloff)! - Add the `yes` command. `yes [STRING]...` repeats a line built from its operands (`y` when there are none), so `yes | head -3` and `yes | some-prompt` work instead of failing with exit 127. Because pipeline stages here run to completion rather than streaming, the stream is finite: it ends after `executionLimits.maxLoopIterations` lines, or earlier if the repeated line would exceed the output size limit.
+
+### Patch Changes
+
+- [#445](https://github.com/vercel-labs/just-bash/pull/445) [`7313062`](https://github.com/vercel-labs/just-bash/commit/7313062a04dc9c04a7a7c4bc2f1e2f2b8d9097f0) Thanks [@trieloff](https://github.com/trieloff)! - interpreter: preserve complete associative-array values in `declare -A` compound assignments
+
+  Quoted values containing whitespace were reconstructed without quoting before the `declare` builtin parsed them, so every value was silently truncated at its first space. Associative-array declarations now retain whitespace and other quoted content.
+
+- [#346](https://github.com/vercel-labs/just-bash/pull/346) [`52a5617`](https://github.com/vercel-labs/just-bash/commit/52a5617043074e1e62e2158f211c61a4e901431c) Thanks [@iroiro147](https://github.com/iroiro147)! - fs: keep the Buffer-less `fromBuffer` fallback under the argument limit
+
+  Without `Buffer` (for example in a Chrome extension service worker), `fromBuffer` converted `base64`, `binary` and `latin1` content by spreading 64KB chunks into `String.fromCharCode`, which can exceed the engine's argument limit and throw `RangeError: Maximum call stack size exceeded` on a 64KB `cat`. The fallback now converts in 8KB chunks.
+
+- [#443](https://github.com/vercel-labs/just-bash/pull/443) [`a36c324`](https://github.com/vercel-labs/just-bash/commit/a36c3248d001e227378879c94a31b9fb54e6bd11) Thanks [@RyanGarber](https://github.com/RyanGarber)! - Handle accessor descriptors when installing module defense-in-depth proxies on Bun, preserving blocking behavior and original descriptors on teardown.
+
+- [#414](https://github.com/vercel-labs/just-bash/pull/414) [`31ac823`](https://github.com/vercel-labs/just-bash/commit/31ac823989ae8decc1bc534eee5caaede6d5fef3) Thanks [@mutewinter](https://github.com/mutewinter)! - find: report a directory it cannot read and keep going
+
+  A `readdir` failure inside the traversal threw out of the whole search, so one unreadable directory ended `find` with no results: exit 1 and `find: EACCES: permission denied, scandir '<path>'` on its own, and exit 0 with nothing at all once piped through `head` with stderr silenced. Every macOS home directory holds such a directory (`.Trash`, several under `Library`), so a recursive `find` over a mounted home directory never returned anything.
+
+  GNU find names the directory on stderr, continues with everything else, and exits 1 at the end. It now does the same here. The message is `find: <path>: Permission denied`, with the phrase taken from the errno alone, so nothing from the underlying error's text reaches the output. A failure that is not one of the errnos a directory read can produce (a cancellation, an execution limit, a filesystem policy refusal) still ends the search as before.
+
+  Messages are emitted in traversal order beside the node's own output, whatever order the parallel batch settled in, and a failed read still counts toward the trace's `readdirCalls` and `readdirTime`.
+
+- [#384](https://github.com/vercel-labs/just-bash/pull/384) [`e0cca16`](https://github.com/vercel-labs/just-bash/commit/e0cca16192e8ab62754b4272b7338467cc05ea92) Thanks [@taoche](https://github.com/taoche)! - Match real jq behavior for `to_entries` on arrays (numeric-key entries instead of null) and `tonumber` on empty or whitespace-only strings (error instead of 0).
+
+- [#417](https://github.com/vercel-labs/just-bash/pull/417) [`017a911`](https://github.com/vercel-labs/just-bash/commit/017a911d3b687d44bb0e2de707b78f02ec825569) Thanks [@trieloff](https://github.com/trieloff)! - interpreter: give a loop left via `break`/`continue` status 0 instead of the last command's
+
+  `break` and `continue` are builtins that return 0, and they are the last command a loop body runs. A loop exited through them reported the status of whatever ran _before_ the `break` instead:
+
+  ```bash
+  while :; do false; break; done; echo $?            # was 1, bash says 0
+  for i in 1; do false; break; done; echo $?         # was 1, bash says 0
+  for i in 1 2; do false; continue; done; echo $?    # was 1, bash says 0
+  ```
+
+  All four loop forms were affected — `for`, C-style `for`, `while`, `until` — as was a `break`/`continue` in a `while` condition and a multi-level `break 2` unwinding through an enclosing loop.
+
+  The stale status is invisible until something reads `$?`, and under `set -e` the phantom failing loop ends the script with no output and no diagnostic:
+
+  ```bash
+  set -euo pipefail
+  while :; do
+    [ 5 -eq 0 ] && break     # correctly exempt from errexit as the left operand of &&
+    break
+  done
+  echo ok                    # never ran
+  ```
+
+  `$?` moves with the status, so the next iteration sees it too — a `for` loop runs nothing between the `continue` and the next iteration's first command, and would otherwise still expose the failure there:
+
+  ```bash
+  for i in 1 2; do echo "$i:$?"; false; continue; done   # was 1:0 2:1, bash says 1:0 2:0
+  ```
+
+  `continue` sets the status at the point it runs but does not pin it: a later iteration still overwrites it, so `for i in 1 2; do if [ $i = 1 ]; then true; continue; fi; false; done` is still 1. A loop that ends normally is unchanged and reports its last command, and `return` from a function still reports the last command rather than 0.
+
+  Reported downstream as ai-ecoverse/slicc#2978.
+
+- [#488](https://github.com/vercel-labs/just-bash/pull/488) [`c21d678`](https://github.com/vercel-labs/just-bash/commit/c21d678ea07350bf8d535d352922f71303f4ca06) Thanks [@FredAmartey](https://github.com/FredAmartey)! - Give `MountableFs` synchronous `mkdirSync` and `writeFileSync`, routed to the filesystem that owns the path, so `Bash` sets up `/bin`, `/dev`, `/proc`, `/tmp` and the working directory in its base. Paths on a filesystem without synchronous writes throw `ENOSYS` and are left out of the layout.
+
+- [#416](https://github.com/vercel-labs/just-bash/pull/416) [`4af0dc0`](https://github.com/vercel-labs/just-bash/commit/4af0dc0ff06b2985f19f692067af115b4ab4669d) Thanks [@trieloff](https://github.com/trieloff)! - Fix default, assignment, and alternative parameter expansions used as an entire double-quoted word under `set -u`. For example, `echo "${U:-fallback}"` now prints `fallback` when `U` is unset instead of reporting "unbound variable". This also lets scripts safely check optional CI variables such as `GITHUB_STEP_SUMMARY`.
+
+- [#509](https://github.com/vercel-labs/just-bash/pull/509) [`632090a`](https://github.com/vercel-labs/just-bash/commit/632090a60b710608e2180638a757172dc0316b2c) Thanks [@janneh](https://github.com/janneh)! - Bundle the patched `smol-toml` 1.9.0.
+
+  The Node bundle inlines `smol-toml`, so a consumer can't pick up its fix through its own lockfile. Only a just-bash release carries it.
+
+- [#444](https://github.com/vercel-labs/just-bash/pull/444) [`128feaa`](https://github.com/vercel-labs/just-bash/commit/128feaae87b438d7484d55bd22abbd4d106a4aa0) Thanks [@RyanGarber](https://github.com/RyanGarber)! - Use a virtual executable name for CPython instead of the host worker path, avoiding script finalization failures under long installation paths without weakening worker protections.
+
+- [#314](https://github.com/vercel-labs/just-bash/pull/314) [`90df057`](https://github.com/vercel-labs/just-bash/commit/90df0572d3a60a459ec1bd0d13035a17c53ca63f) Thanks [@tylergibbs1](https://github.com/tylergibbs1)! - Repeated `grep -e` options overwrote the earlier patterns, so only the last one was used. All `-e` patterns now combine.
+
+- [#503](https://github.com/vercel-labs/just-bash/pull/503) [`130da94`](https://github.com/vercel-labs/just-bash/commit/130da942f0ebd948bd957c1208ec8908503281b7) Thanks [@asafyish](https://github.com/asafyish)! - Host operations that settle after a cancelled execution no longer surface as a process-level `unhandledRejection`.
+
+  Aborting or timing out an execution while the worker bridge was awaiting a host tool (or an `exec`) left that operation to settle after the defense-in-depth box deactivated. The box's `Promise.prototype.then` guard, which blocks sandbox callbacks once their execution ends, then dropped the handlers meant to consume that result: a late rejection crashed processes that treat unhandled rejections as fatal, and a late success never reached the bridge. Host-side settlement now goes through `await`, which bypasses the guarded `then`.
+
+- [#487](https://github.com/vercel-labs/just-bash/pull/487) [`0353b22`](https://github.com/vercel-labs/just-bash/commit/0353b22ca56ae88f06a5c4e9c784ca9b075051b2) Thanks [@FredAmartey](https://github.com/FredAmartey)! - Keep leading blanks after `a\`, `i\` and `c\` in `sed` text, as GNU does, including blanks escaped with a backslash. The one-line `a text` form now strips every leading blank instead of only the first.
+
+- [#513](https://github.com/vercel-labs/just-bash/pull/513) [`ef8c75d`](https://github.com/vercel-labs/just-bash/commit/ef8c75deaeb74fc314767512d1550bcc84407d4e) Thanks [@jamalkamaladdin](https://github.com/jamalkamaladdin)! - Fix intermittent `python3` failures with `OSError: [Errno 29] I/O error` on a busy host. A wakeup left over from the previous bridge call could end the wait for the next call before the main thread answered it. The worker now keeps waiting until the call is answered, within the same operation timeout.
+
+- [#506](https://github.com/vercel-labs/just-bash/pull/506) [`4ee035b`](https://github.com/vercel-labs/just-bash/commit/4ee035b6770bb0d6fd7998f22ea6651544433cf9) Thanks [@privatenumber](https://github.com/privatenumber)! - timeout: a deadline that lands while a command is still loading no longer aborts the rest of the script
+
+  `timeout` on a cold command — the first use of any lazily loaded command — could return 124 and still kill every statement after it. Cancelled invocations now stop waiting for the load and report cancellation instead.
+
 ## 3.5.0
 
 ### Minor Changes
