@@ -35,7 +35,8 @@ const trHelp = {
   [:graph:]   all printable characters except space
   [:cntrl:]   all control characters
   [:xdigit:]  all hexadecimal digits
-  \\n, \\t, \\r  escape sequences`,
+  \\NNN       character with octal value NNN (1 to 3 digits)
+  \\\\, \\a, \\b, \\f, \\n, \\r, \\t, \\v  escape sequences`,
 };
 
 // POSIX character class definitions (Map prevents prototype pollution)
@@ -67,6 +68,46 @@ const POSIX_CLASSES = new Map<string, string>([
   ["[:upper:]", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
   ["[:xdigit:]", "0123456789ABCDEFabcdef"],
 ]);
+
+// Backslash escapes in a SET (Map prevents prototype pollution)
+const ESCAPES = new Map<string, string>([
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["f", "\f"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+  ["v", "\v"],
+]);
+
+const isOctalDigit = (ch: string | undefined): boolean =>
+  ch !== undefined && ch >= "0" && ch <= "7";
+
+/**
+ * Read one character of a SET starting at `i`, decoding a backslash escape.
+ * `\NNN` is one to three octal digits; like GNU tr, a third digit is only
+ * taken when the value still fits in a byte, so `\400` is `\40` then `0`.
+ * Any other escaped character stands for itself, and a trailing backslash
+ * is a literal backslash.
+ */
+function readSetChar(set: string, i: number): { char: string; next: number } {
+  if (set[i] !== "\\" || i + 1 >= set.length) {
+    return { char: set[i], next: i + 1 };
+  }
+  const next = set[i + 1];
+  if (isOctalDigit(next)) {
+    let value = 0;
+    let j = i + 1;
+    while (j < i + 4 && isOctalDigit(set[j])) {
+      const candidate = value * 8 + (set.charCodeAt(j) - 48);
+      if (candidate > 0o377) break;
+      value = candidate;
+      j++;
+    }
+    return { char: String.fromCharCode(value), next: j };
+  }
+  return { char: ESCAPES.get(next) ?? next, next: i + 2 };
+}
 
 function expandRange(
   set: string,
@@ -111,26 +152,13 @@ function expandRange(
       if (found) continue;
     }
 
-    // Handle escape sequences
-    if (set[i] === "\\" && i + 1 < set.length) {
-      const next = set[i + 1];
-      if (next === "n") {
-        append("\n");
-      } else if (next === "t") {
-        append("\t");
-      } else if (next === "r") {
-        append("\r");
-      } else {
-        append(next);
-      }
-      i += 2;
-      continue;
-    }
+    const first = readSetChar(set, i);
 
-    // Handle character ranges like a-z
-    if (i + 2 < set.length && set[i + 1] === "-") {
-      const start = set.charCodeAt(i);
-      const end = set.charCodeAt(i + 2);
+    // Handle character ranges like a-z; either endpoint may be an escape
+    if (set[first.next] === "-" && first.next + 1 < set.length) {
+      const last = readSetChar(set, first.next + 1);
+      const start = first.char.charCodeAt(0);
+      const end = last.char.charCodeAt(0);
       const rangeLength = end >= start ? end - start + 1 : 0;
       useIterations(rangeLength);
       if (rangeLength > maxLength - result.length) {
@@ -142,12 +170,12 @@ function expandRange(
       for (let code = start; code <= end; code++) {
         result += String.fromCharCode(code);
       }
-      i += 3;
+      i = last.next;
       continue;
     }
 
-    append(set[i]);
-    i++;
+    append(first.char);
+    i = first.next;
   }
 
   return result;

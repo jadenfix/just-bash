@@ -1,0 +1,55 @@
+{
+  "2000e0493fb8fac6": {
+    "command": "echo a8bc | tr '8bc' '\\18\\60' | cat -v",
+    "files": {},
+    "stdout": "a^A80\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "686811c3eceacb68": {
+    "command": "cat test.txt | tr -d '\\000-\\037'",
+    "files": {
+      "test.txt": "a\u0001B\u001fc\n"
+    },
+    "stdout": "aBc",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "7244f8701fc4d77f": {
+    "command": "echo abcd | tr 'abcd' '\\a\\b\\f\\v' | cat -v",
+    "files": {},
+    "stdout": "^G^H^L^K\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "815dbba4ff838d2e": {
+    "command": "cat test.txt | tr '\\\\' '/'",
+    "files": {
+      "test.txt": "a\\b\n"
+    },
+    "stdout": "a/b\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "92c0d81190d32f9a": {
+    "command": "echo X | tr X '\\015' | cat -v",
+    "files": {},
+    "stdout": "^M\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "9ddb167f9d58dcd3": {
+    "command": "echo xyz | tr 'x-z' '\\101-\\103'",
+    "files": {},
+    "stdout": "ABC\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "a5dd72e7e78a44c0": {
+    "command": "echo abc | tr b '\\101'",
+    "files": {},
+    "stdout": "aAc\n",
+    "stderr": "",
+    "exitCode": 0
+  }
+}
