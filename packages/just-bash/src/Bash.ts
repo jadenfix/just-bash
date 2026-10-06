@@ -48,6 +48,8 @@ import { cloneArrays } from "./interpreter/helpers/array.js";
 import {
   buildBashopts,
   buildShellopts,
+  createShellOptions,
+  createShoptOptions,
 } from "./interpreter/helpers/shellopts.js";
 import {
   Interpreter,
@@ -437,33 +439,8 @@ export class Bash {
       bashPid: options.processInfo?.pid ?? 1, // BASHPID starts as virtual PID
       nextVirtualPid: (options.processInfo?.pid ?? 1) + 1, // Counter for unique subshell PIDs
       currentLine: 1, // $LINENO starts at 1
-      options: {
-        errexit: false,
-        pipefail: false,
-        nounset: false,
-        xtrace: false,
-        verbose: false,
-        posix: false,
-        allexport: false,
-        noclobber: false,
-        noglob: false,
-        noexec: false,
-        vi: false,
-        emacs: false,
-      },
-      shoptOptions: {
-        extglob: false,
-        dotglob: false,
-        nullglob: false,
-        failglob: false,
-        globstar: false,
-        globskipdots: true, // Default to true in bash >=5.2
-        nocaseglob: false,
-        nocasematch: false,
-        expand_aliases: false,
-        lastpipe: false,
-        xpg_echo: false,
-      },
+      options: createShellOptions(),
+      shoptOptions: createShoptOptions(),
       inCondition: false,
       loopDepth: 0,
       // Export standard shell variables by default (matches bash behavior)
@@ -784,6 +761,15 @@ export class Bash {
         }
       }
 
+      // A nested shell starts from defaults plus its exported option lists.
+      // Its shopt changes must not mutate the parent's shared option object.
+      const shellOptions = effectiveOptions.newShell
+        ? createShellOptions(execEnv.get("SHELLOPTS"))
+        : { ...this.state.options };
+      const shoptOptions = effectiveOptions.newShell
+        ? createShoptOptions(execEnv.get("BASHOPTS"))
+        : this.state.shoptOptions;
+
       if (effectiveOptions.newShell) {
         // Startup defaults do not add export attributes. Resetting inherited
         // values retains their existing export attributes.
@@ -797,8 +783,8 @@ export class Bash {
         }
         execEnv.set("IFS", " \t\n");
         execEnv.set("OPTIND", "1");
-        execEnv.set("SHELLOPTS", buildShellopts(this.state.options));
-        execEnv.set("BASHOPTS", buildBashopts(this.state.shoptOptions));
+        execEnv.set("SHELLOPTS", buildShellopts(shellOptions));
+        execEnv.set("BASHOPTS", buildBashopts(shoptOptions));
       }
 
       const execState: InterpreterState = {
@@ -813,7 +799,8 @@ export class Bash {
         // Deep copy mutable objects to prevent interference
         functions: new Map(this.state.functions),
         localScopes: [...this.state.localScopes],
-        options: { ...this.state.options },
+        options: shellOptions,
+        shoptOptions,
         // Share hashTable reference - it should persist across exec calls
         hashTable: this.state.hashTable,
         // Pass stdin through to commands (for bash -c with piped input).
