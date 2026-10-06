@@ -4,17 +4,18 @@ import { nullPrototype } from "./commands/query-engine/safe-object.js";
 
 describe("execution result environment", () => {
   it.each([
-    undefined,
-    "original",
-  ])("unwinds temporary bindings after expansion failure (TEMP=%s)", async (original) => {
+    [undefined, "TEMP=secret echo ${MISSING:?required}"],
+    ["original", "TEMP=secret echo ${MISSING:?required}"],
+    [undefined, "TEMP=one TEMP=two echo ${MISSING:?required}"],
+    ["original", "TEMP=one TEMP=two echo ${MISSING:?required}"],
+    [undefined, "TEMP=one TEMP=two OTHER=${MISSING:?required} echo"],
+    ["original", "TEMP=one TEMP=two OTHER=${MISSING:?required} echo"],
+  ])("unwinds temporary bindings after expansion failure (TEMP=%s, %s)", async (original, command) => {
     const bash = new Bash();
-    const result = await bash.exec(
-      "MARKER=kept; TEMP=secret echo ${MISSING:?required}",
-      {
-        env: original === undefined ? {} : { TEMP: original },
-        replaceEnv: true,
-      },
-    );
+    const result = await bash.exec(`MARKER=kept; ${command}`, {
+      env: original === undefined ? {} : { TEMP: original },
+      replaceEnv: true,
+    });
     expect(result.env).toStrictEqual(
       nullPrototype(
         original === undefined

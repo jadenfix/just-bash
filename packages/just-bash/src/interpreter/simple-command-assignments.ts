@@ -293,7 +293,9 @@ async function processArrayAssignment(
 
   // For prefix assignments with a command, bash stringifies the array syntax
   if (node.name) {
-    tempAssignments.set(name, ctx.state.env.get(name));
+    if (!tempAssignments.has(name)) {
+      tempAssignments.set(name, ctx.state.env.get(name));
+    }
     const elements = array.map((el) => wordToLiteralString(el));
     const stringified = `(${elements.join(" ")})`;
     ctx.state.env.set(name, stringified);
@@ -892,7 +894,9 @@ async function processScalarAssignment(
 
   if (node.name) {
     if (arrayElementKey === undefined) {
-      tempAssignments.set(targetName, ctx.state.env.get(targetName));
+      if (!tempAssignments.has(targetName)) {
+        tempAssignments.set(targetName, ctx.state.env.get(targetName));
+      }
       ctx.state.env.set(targetName, finalValue);
     } else {
       // See processSubscriptAssignment: do not leak array-element prefix writes.

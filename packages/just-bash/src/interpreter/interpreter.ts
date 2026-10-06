@@ -681,6 +681,7 @@ export class Interpreter {
     let commandStarted = false;
     let bindingsPushed = false;
     let commandExited = false;
+    let successfulNullCommand = false;
     try {
       // Process all assignments (array, subscript, and scalar)
       const assignmentResult = await processAssignments(
@@ -903,6 +904,7 @@ export class Interpreter {
       // However, a literal empty string (like '') is "command not found".
       if (!commandName) {
         if (commandIsOnlyExpansions) {
+          successfulNullCommand = true;
           // No args - treat as a no-op that reports the status of a command
           // substitution in the word (`$(exit 42)` is 42) and 0 otherwise.
           transaction.finish();
@@ -1063,13 +1065,15 @@ export class Interpreter {
       commandExited = commandStarted && error instanceof ExitError;
       throw error;
     } finally {
-      // Only a dispatched POSIX special builtin can retain prefix assignments.
+      // Successful null commands retain assignments, as do dispatched POSIX
+      // special builtins. Failed preparation must unwind prefix bindings.
       const isPosixSpecialWithPersistence =
         isPosixSpecialBuiltin(commandName) &&
         commandName !== "unset" &&
         commandName !== "eval";
       const shouldRestoreTempAssignments =
         !commandExited &&
+        !successfulNullCommand &&
         (!commandStarted ||
           !this.ctx.state.options.posix ||
           !isPosixSpecialWithPersistence);
