@@ -4,6 +4,61 @@ import { nullPrototype } from "./commands/query-engine/safe-object.js";
 
 describe("execution result environment", () => {
   it.each([
+    undefined,
+    "original",
+  ])("unwinds temporary bindings after expansion failure (TEMP=%s)", async (original) => {
+    const bash = new Bash();
+    const result = await bash.exec(
+      "MARKER=kept; TEMP=secret echo ${MISSING:?required}",
+      {
+        env: original === undefined ? {} : { TEMP: original },
+        replaceEnv: true,
+      },
+    );
+    expect(result.env).toStrictEqual(
+      nullPrototype(
+        original === undefined
+          ? { MARKER: "kept", "?": "0" }
+          : { MARKER: "kept", "?": "0", TEMP: original },
+      ),
+    );
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("bash: required\n");
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("retains prefix bindings when the command actually exits", async () => {
+    const result = await new Bash().exec("TEMP=secret exit 7", {
+      env: {},
+      replaceEnv: true,
+    });
+    expect(result.env.TEMP).toBe("secret");
+    expect(result.exitCode).toBe(7);
+  });
+
+  it("unwinds bindings when a later prefix value fails to expand", async () => {
+    const result = await new Bash().exec(
+      "MARKER=kept; TEMP=secret OTHER=${MISSING:?required} echo",
+      {
+        env: { TEMP: "original" },
+        replaceEnv: true,
+      },
+    );
+    expect(result.env).toStrictEqual(
+      nullPrototype({ TEMP: "original", MARKER: "kept", "?": "0" }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("retains prefix bindings after a completed POSIX special builtin", async () => {
+    const result = await new Bash().exec("set -o posix; TEMP=kept :; exit", {
+      env: {},
+      replaceEnv: true,
+    });
+    expect(result.env.TEMP).toBe("kept");
+    expect(result.exitCode).toBe(0);
+  });
+  it.each([
     ["normal execution", "echo ok", 0],
     ["empty script", "", 0],
     ["whitespace-only script", " \n\t", 0],

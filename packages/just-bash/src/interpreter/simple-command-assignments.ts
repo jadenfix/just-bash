@@ -63,21 +63,20 @@ export interface AssignmentResult {
   continueToNext: boolean;
   /** Accumulated xtrace output for assignments */
   xtraceOutput: string;
-  /** Temporary assignments for prefix bindings (FOO=bar cmd) */
-  tempAssignments: Map<string, string | undefined>;
   /** Error result if assignment failed */
   error?: ExecResult;
 }
 
 /**
  * Process all assignments in a simple command.
- * Returns assignment results including temp bindings and any errors.
+ * Records temporary bindings in the caller's map so command cleanup can unwind
+ * partial assignment processing, including a failure in a later value.
  */
 export async function processAssignments(
   ctx: InterpreterContext,
   node: SimpleCommandNode,
+  tempAssignments: Map<string, string | undefined>,
 ): Promise<AssignmentResult> {
-  const tempAssignments = new Map<string, string | undefined>();
   let xtraceOutput = "";
 
   for (const assignment of node.assignments) {
@@ -97,7 +96,6 @@ export async function processAssignments(
         return {
           continueToNext: false,
           xtraceOutput,
-          tempAssignments,
           error: arrayResult.error,
         };
       }
@@ -117,7 +115,6 @@ export async function processAssignments(
       return {
         continueToNext: false,
         xtraceOutput,
-        tempAssignments,
         error: result("", `bash: ${name}: bad array subscript\n`, 1),
       };
     }
@@ -138,7 +135,6 @@ export async function processAssignments(
         return {
           continueToNext: false,
           xtraceOutput,
-          tempAssignments,
           error: subscriptResult.error,
         };
       }
@@ -160,7 +156,6 @@ export async function processAssignments(
       return {
         continueToNext: false,
         xtraceOutput,
-        tempAssignments,
         error: scalarResult.error,
       };
     }
@@ -172,7 +167,6 @@ export async function processAssignments(
   return {
     continueToNext: false,
     xtraceOutput,
-    tempAssignments,
   };
 }
 
