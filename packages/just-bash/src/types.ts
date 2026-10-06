@@ -163,6 +163,8 @@ export interface RuntimeCommandContext {
   cwd: string;
   /** Environment variables - uses Map to prevent prototype pollution */
   env: Map<string, string>;
+  /** Shell-local alias definitions for alias and unalias. */
+  aliases?: Map<string, string>;
   /** Interpreter-owned assignment gateway for commands such as `printf -v`. */
   assignShellVariable?: (
     name: string,

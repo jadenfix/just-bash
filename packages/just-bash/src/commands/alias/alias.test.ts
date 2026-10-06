@@ -3,6 +3,39 @@ import { Bash } from "../../Bash.js";
 
 // Note: Each exec is a new shell - aliases don't persist across execs
 describe("alias command", () => {
+  it("keeps alias-shaped environment values as data with explicit expansion", async () => {
+    const bash = new Bash({ env: { BASH_ALIAS_echo: "printf injected" } });
+    const result = await bash.exec(
+      `shopt -s expand_aliases; echo expected; alias; compgen -A alias; type -t echo`,
+    );
+    expect(result.stdout).toBe("expected\nbuiltin\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.env.BASH_ALIAS_echo).toBe("printf injected");
+  });
+
+  it("copies shell-local aliases into subshells and wrappers but not new shells", async () => {
+    const bash = new Bash();
+    const result = await bash.exec(`shopt -s expand_aliases
+alias greet='echo parent'
+(alias greet='echo subshell'; greet)
+value=$(alias greet='echo substitution'; greet)
+echo "$value"
+alias greet='echo pipeline' | cat
+greet
+env alias greet
+bash -c 'alias'
+type -t greet
+compgen -A alias
+unalias greet
+alias`);
+    expect(result.stdout).toBe(
+      "subshell\nsubstitution\nparent\nalias greet='echo parent'\nalias\ngreet\n",
+    );
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.env.BASH_ALIAS_greet).toBeUndefined();
+  });
   it("should list no aliases initially", async () => {
     const env = new Bash();
     const result = await env.exec("alias");
@@ -54,9 +87,7 @@ describe("alias command", () => {
   });
 });
 
-// Note: Alias expansion is NOT implemented to match real bash behavior.
-// In non-interactive mode (scripts), bash does not expand aliases.
-// The alias command only stores/lists alias definitions.
+// Non-interactive shells expand aliases only with shopt -s expand_aliases.
 
 describe("unalias command", () => {
   it("should remove an alias within same exec", async () => {

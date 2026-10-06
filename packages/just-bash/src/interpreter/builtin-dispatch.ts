@@ -829,11 +829,13 @@ export async function executeExternalCommand(
   // Give extensions one stable, revocable descriptor capability even when
   // this invocation has not created any extra descriptors yet.
   ctx.state.fileDescriptors ??= new Map();
+  ctx.state.aliases ??= new Map();
   const cmdCtx: RuntimeCommandContext = {
     fs: ctx.fs,
     fsIdentity: getFileSystemIdentity(ctx.fs),
     cwd: ctx.state.cwd,
     env: ctx.state.env,
+    aliases: ctx.state.aliases,
     assignShellVariable: async (name, value, subscript) => {
       if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
         throw new Error(`${name}: not a valid identifier`);

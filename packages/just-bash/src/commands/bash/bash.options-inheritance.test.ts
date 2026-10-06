@@ -2,7 +2,51 @@ import { describe, expect, it } from "vitest";
 import { Bash } from "../../Bash.js";
 
 describe("nested shell option inheritance", () => {
-  it.each(["bash", "sh"])("%s enables exported pipefail", async (shell) => {
+  it("keeps environment alias-shaped values as data", async () => {
+    const bash = new Bash();
+    const result = await bash.exec(
+      'bash -c \'echo expected; printf "%s\\n" "$BASH_ALIAS_echo"\'',
+      {
+        env: { BASHOPTS: "expand_aliases", BASH_ALIAS_echo: "printf injected" },
+        replaceEnv: true,
+      },
+    );
+    expect(result.stdout).toBe("expected\nprintf injected\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("uses child shopt options in direct recursive wrappers", async () => {
+    const result = await new Bash().exec(
+      `bash -c 'shopt -s xpg_echo; echo "\\t"; env echo "\\t"'`,
+    );
+    expect(result.stdout).toBe("\t\n\t\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("copies active caller options without connecting the child to root state", async () => {
+    const bash = new Bash({
+      customCommands: [
+        {
+          name: "wrapper",
+          execute: async (_args, ctx) => {
+            if (!ctx.exec) throw new Error("wrapper requires recursive exec");
+            return ctx.exec("false | true; echo $?; shopt -s nullglob", {
+              cwd: ctx.cwd,
+            });
+          },
+        },
+      ],
+    });
+    const result = await bash.exec(
+      `set -o pipefail; export SHELLOPTS; bash -c 'wrapper'; printf "<%s>\\n" missing-*`,
+    );
+    expect(result.stdout).toBe("1\n<missing-*>\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+  it.each(["sh"])("%s enables exported pipefail", async (shell) => {
     const bash = new Bash();
     const result = await bash.exec(
       `set -o pipefail; export SHELLOPTS; ${shell} -c 'false | true; echo $?'`,

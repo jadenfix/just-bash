@@ -765,10 +765,12 @@ export class Bash {
       // Its shopt changes must not mutate the parent's shared option object.
       const shellOptions = effectiveOptions.newShell
         ? createShellOptions(execEnv.get("SHELLOPTS"))
-        : { ...this.state.options };
+        : { ...(callerState ?? this.state).options };
       const shoptOptions = effectiveOptions.newShell
         ? createShoptOptions(execEnv.get("BASHOPTS"))
-        : this.state.shoptOptions;
+        : callerState
+          ? { ...callerState.shoptOptions }
+          : this.state.shoptOptions;
 
       if (effectiveOptions.newShell) {
         // Startup defaults do not add export attributes. Resetting inherited
@@ -798,6 +800,9 @@ export class Bash {
           (replaceEnv ? "" : this.state.previousDir),
         // Deep copy mutable objects to prevent interference
         functions: new Map(this.state.functions),
+        aliases: effectiveOptions.newShell
+          ? new Map()
+          : new Map((callerState ?? this.state).aliases),
         localScopes: [...this.state.localScopes],
         options: shellOptions,
         shoptOptions,
