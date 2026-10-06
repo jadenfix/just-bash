@@ -4,6 +4,20 @@ import { nullPrototype } from "./commands/query-engine/safe-object.js";
 
 describe("execution result environment", () => {
   it.each([
+    "TEMP=secret eval 'echo ${MISSING:?required}'",
+    "TEMP=(one) echo ${MISSING:?required}",
+    "TEMP=$((TEMP=5)) echo ${MISSING:?required}",
+  ])("restores pre-expansion prefix state for %s", async (command) => {
+    const result = await new Bash().exec(command, {
+      env: { TEMP: "original" },
+      replaceEnv: true,
+    });
+    expect(result.env.TEMP).toBe("original");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("bash: required\n");
+    expect(result.exitCode).toBe(1);
+  });
+  it.each([
     [undefined, "TEMP=secret echo ${MISSING:?required}"],
     ["original", "TEMP=secret echo ${MISSING:?required}"],
     [undefined, "TEMP=one TEMP=two echo ${MISSING:?required}"],
@@ -35,6 +49,15 @@ describe("execution result environment", () => {
     });
     expect(result.env.TEMP).toBe("secret");
     expect(result.exitCode).toBe(7);
+  });
+
+  it("restores array state after command-scoped array assignments", async () => {
+    const result = await new Bash().exec(
+      'TEMP=(original); TEMP=(one) :; printf "[%s]\\n" "${TEMP[@]}"',
+    );
+    expect(result.stdout).toBe("[original]\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
   });
 
   it("unwinds bindings when a later prefix value fails to expand", async () => {

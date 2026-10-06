@@ -112,6 +112,7 @@ import type {
   InterpreterContext,
   InterpreterExecOptions,
   InterpreterState,
+  ShellArray,
 } from "./types.js";
 
 function unsupportedCommandNode(node: never): never {
@@ -677,6 +678,7 @@ export class Interpreter {
     this.ctx.state.lastSubstitutionExitCode = null;
 
     const tempAssignments = new Map<string, string | undefined>();
+    const tempArrays = new Map<string, ShellArray | undefined>();
     let commandName = "";
     let commandStarted = false;
     let bindingsPushed = false;
@@ -688,6 +690,7 @@ export class Interpreter {
         this.ctx,
         node,
         tempAssignments,
+        tempArrays,
       );
       if (assignmentResult.error) {
         return assignmentResult.error;
@@ -1061,8 +1064,8 @@ export class Interpreter {
       return cmdResult;
     } catch (error) {
       // An actual exit keeps command-prefix bindings visible to EXIT handling.
-      // Expansion failures occur before command dispatch and must unwind them.
-      commandExited = commandStarted && error instanceof ExitError;
+      // Fatal expansion failures, including propagated eval failures, unwind them.
+      commandExited = error instanceof ExitError && error.reason === "exit";
       throw error;
     } finally {
       // Successful null commands retain assignments, as do dispatched POSIX
@@ -1079,6 +1082,12 @@ export class Interpreter {
           !isPosixSpecialWithPersistence);
 
       if (shouldRestoreTempAssignments) {
+        for (const [name, array] of tempArrays) {
+          if (array) {
+            this.ctx.state.arrays ??= new Map();
+            this.ctx.state.arrays.set(name, array);
+          } else this.ctx.state.arrays?.delete(name);
+        }
         for (const [name, value] of tempAssignments) {
           // Skip restoration if this variable was a local that was fully unset
           // This implements bash's behavior where unsetting all local cells
