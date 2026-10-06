@@ -768,9 +768,7 @@ export class Bash {
         : { ...(callerState ?? this.state).options };
       const shoptOptions = effectiveOptions.newShell
         ? createShoptOptions(execEnv.get("BASHOPTS"))
-        : callerState
-          ? { ...callerState.shoptOptions }
-          : this.state.shoptOptions;
+        : { ...(callerState ?? this.state).shoptOptions };
 
       if (effectiveOptions.newShell) {
         // Startup defaults do not add export attributes. Resetting inherited

@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { Bash } from "../../Bash.js";
 
 describe("nested shell option inheritance", () => {
+  it("does not carry shopt changes into later host executions", async () => {
+    const bash = new Bash();
+    await bash.exec("shopt -s nullglob");
+    const result = await bash.exec(
+      'printf "<%s>\\n" missing-*; echo "$BASHOPTS"',
+    );
+    expect(result.stdout).toBe("<missing-*>\nglobskipdots\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
   it("keeps environment alias-shaped values as data", async () => {
     const bash = new Bash();
     const result = await bash.exec(

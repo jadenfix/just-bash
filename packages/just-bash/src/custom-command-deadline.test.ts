@@ -8,25 +8,30 @@ function never(): Promise<never> {
 
 describe("custom command deadline boundary", () => {
   it("revokes retained alias and environment maps after command completion", async () => {
-    let retainedEnv: Map<string, string> | undefined;
-    let retainedAliases: Map<string, string> | undefined;
+    const retainedMaps: Map<string, string>[] = [];
     const bash = new Bash({
       defenseInDepth: false,
       customCommands: [
         defineCommand("retain", async (_args, ctx) => {
-          retainedEnv = ctx.env;
-          retainedAliases = ctx.aliases;
+          if (!ctx.aliases) throw new Error("missing alias map");
+          ctx.env.set("MARKER", "initial");
+          ctx.aliases.set("greet", "echo greeting");
+          retainedMaps.push(ctx.env, ctx.aliases);
+          ctx.env.forEach((_value, key, map) => {
+            if (key === "MARKER") retainedMaps.push(map);
+          });
+          ctx.aliases.forEach((_value, key, map) => {
+            if (key === "greet") retainedMaps.push(map);
+          });
           return { stdout: "", stderr: "", exitCode: 0 };
         }),
         defineCommand("mutate", async () => {
-          if (!retainedEnv || !retainedAliases)
-            throw new Error("missing retained context maps");
-          expect(() => retainedEnv?.set("MARKER", "late")).toThrow(
-            "execution aborted",
-          );
-          expect(() => retainedAliases?.set("echo", "printf injected")).toThrow(
-            "execution aborted",
-          );
+          expect(retainedMaps).toHaveLength(4);
+          for (const map of retainedMaps) {
+            expect(() => map.set("echo", "printf injected")).toThrow(
+              "execution aborted",
+            );
+          }
           return { stdout: "", stderr: "", exitCode: 0 };
         }),
       ],
@@ -37,7 +42,7 @@ describe("custom command deadline boundary", () => {
     expect(result.stdout).toBe("expected\n");
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
-    expect(result.env.MARKER).toBeUndefined();
+    expect(result.env.MARKER).toBe("initial");
   });
   it("returns a shell failure when extension cleanup fails", async () => {
     const logs: Array<{

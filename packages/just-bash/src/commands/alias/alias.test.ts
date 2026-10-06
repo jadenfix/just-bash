@@ -14,7 +14,7 @@ describe("alias command", () => {
     expect(result.env.BASH_ALIAS_echo).toBe("printf injected");
   });
 
-  it("copies shell-local aliases into subshells and wrappers but not new shells", async () => {
+  it("isolates alias changes in subshells, substitutions, and pipelines", async () => {
     const bash = new Bash();
     const result = await bash.exec(`shopt -s expand_aliases
 alias greet='echo parent'
@@ -22,19 +22,20 @@ alias greet='echo parent'
 value=$(alias greet='echo substitution'; greet)
 echo "$value"
 alias greet='echo pipeline' | cat
-greet
-env alias greet
-bash -c 'alias'
-type -t greet
-compgen -A alias
-unalias greet
-alias`);
-    expect(result.stdout).toBe(
-      "subshell\nsubstitution\nparent\nalias greet='echo parent'\nalias\ngreet\n",
-    );
+greet`);
+    expect(result.stdout).toBe("subshell\nsubstitution\nparent\n");
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
     expect(result.env.BASH_ALIAS_greet).toBeUndefined();
+  });
+
+  it("copies aliases into wrappers but starts nested shells with none", async () => {
+    const result = await new Bash().exec(
+      "alias greet='echo parent'; env alias greet; bash -c 'alias'",
+    );
+    expect(result.stdout).toBe("alias greet='echo parent'\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
   });
   it("should list no aliases initially", async () => {
     const env = new Bash();
@@ -45,8 +46,10 @@ alias`);
 
   it("should set and list an alias within same exec", async () => {
     const env = new Bash();
-    const result = await env.exec("alias ll='ls -la'; alias");
-    expect(result.stdout).toBe("alias ll='ls -la'\n");
+    const result = await env.exec(
+      "alias ll='ls -la'; alias; type -t ll; compgen -A alias",
+    );
+    expect(result.stdout).toBe("alias ll='ls -la'\nalias\nll\n");
     expect(result.exitCode).toBe(0);
   });
 

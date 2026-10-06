@@ -351,6 +351,8 @@ export async function executeUserScript(
 
   const parentLoopDepth = ctx.state.loopDepth;
   const cleanup = beginIsolatedShellState(ctx.state);
+  // An executed script starts a new shell; aliases are shell-local definitions.
+  ctx.state.aliases = new Map();
 
   // Set up subshell-like environment
   ctx.state.parentHasLoopContext = parentLoopDepth > 0;

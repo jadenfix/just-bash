@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { Bash } from "../Bash.js";
 
 describe("executable scripts", () => {
+  it("does not inherit aliases into executed scripts or leak script aliases", async () => {
+    const bash = new Bash({
+      files: {
+        "/script.sh": "#!/bin/bash\necho script\nalias echo='printf child'\n",
+      },
+    });
+    const result = await bash.exec(`chmod +x /script.sh
+shopt -s expand_aliases
+alias echo='printf parent'
+/script.sh
+echo kept`);
+    expect(result.stdout).toBe("script\nparent");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
   it.each([
     2, 1,
   ])("continues a semicolon list after a script exits %i", async (exitCode) => {

@@ -112,6 +112,7 @@ function createRevocableCommandContext(
   let active = true;
   const facadeAbort = context.signal ? new AbortController() : undefined;
   const wrappedValues = new WeakMap<object, object>();
+  const wrappedCallbacks = new WeakMap<object, object>();
   const assertActive = () => {
     if (!active) {
       throw new ExecutionAbortedError(
@@ -239,7 +240,27 @@ function createRevocableCommandContext(
         if (methods.has(property)) return methods.get(property);
         const wrapped = (...args: unknown[]) => {
           assertActive();
-          return wrapValue(Reflect.apply(result, object, args));
+          // Host methods can expose capabilities through callback arguments
+          // (Map.forEach passes its raw map as the third argument).
+          const wrappedArgs = args.map((arg) => {
+            if (typeof arg !== "function") return arg;
+            const cached = wrappedCallbacks.get(arg);
+            if (cached) return cached;
+            const callback = function (
+              this: unknown,
+              ...callbackArgs: unknown[]
+            ) {
+              assertActive();
+              return Reflect.apply(
+                arg,
+                wrapValue(this),
+                callbackArgs.map(wrapValue),
+              );
+            };
+            wrappedCallbacks.set(arg, callback);
+            return callback;
+          });
+          return wrapValue(Reflect.apply(result, object, wrappedArgs));
         };
         methods.set(property, wrapped);
         return wrapped;
