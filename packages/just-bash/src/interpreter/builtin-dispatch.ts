@@ -286,6 +286,9 @@ function createRevocableCommandContext(
   Object.assign(descriptors, {
     fs: dataDescriptor(wrapCapability(context.fs)),
     env: dataDescriptor(wrapCapability(context.env)),
+    aliases: dataDescriptor(
+      context.aliases ? wrapCapability(context.aliases) : undefined,
+    ),
     limits: dataDescriptor(Object.freeze({ ...context.limits })),
     exportedEnv: dataDescriptor(
       context.exportedEnv

@@ -7,6 +7,38 @@ function never(): Promise<never> {
 }
 
 describe("custom command deadline boundary", () => {
+  it("revokes retained alias and environment maps after command completion", async () => {
+    let retainedEnv: Map<string, string> | undefined;
+    let retainedAliases: Map<string, string> | undefined;
+    const bash = new Bash({
+      defenseInDepth: false,
+      customCommands: [
+        defineCommand("retain", async (_args, ctx) => {
+          retainedEnv = ctx.env;
+          retainedAliases = ctx.aliases;
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }),
+        defineCommand("mutate", async () => {
+          if (!retainedEnv || !retainedAliases)
+            throw new Error("missing retained context maps");
+          expect(() => retainedEnv?.set("MARKER", "late")).toThrow(
+            "execution aborted",
+          );
+          expect(() => retainedAliases?.set("echo", "printf injected")).toThrow(
+            "execution aborted",
+          );
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }),
+      ],
+    });
+    const result = await bash.exec(
+      "shopt -s expand_aliases; retain; mutate; echo expected",
+    );
+    expect(result.stdout).toBe("expected\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(result.env.MARKER).toBeUndefined();
+  });
   it("returns a shell failure when extension cleanup fails", async () => {
     const logs: Array<{
       message: string;
