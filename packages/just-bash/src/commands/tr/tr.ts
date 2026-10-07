@@ -1,4 +1,8 @@
-import { decodeBytesToUtf8, latin1FromBytes } from "../../encoding.js";
+import {
+  decodeBytesToUtf8,
+  encodeUtf8ToBytes,
+  latin1FromBytes,
+} from "../../encoding.js";
 import { rethrowFatalExecutionError } from "../../fatal-execution-error.js";
 import { sanitizeErrorMessage } from "../../fs/sanitize-error.js";
 import { ExecutionLimitError } from "../../interpreter/errors.js";
@@ -35,7 +39,7 @@ const trHelp = {
   [:graph:]   all printable characters except space
   [:cntrl:]   all control characters
   [:xdigit:]  all hexadecimal digits
-  \\NNN       character with octal value NNN (1 to 3 digits, up to \\177)
+  \\NNN       character with octal value NNN (1 to 3 digits)
   \\\\, \\a, \\b, \\f, \\n, \\r, \\t, \\v  escape sequences`,
 };
 
@@ -87,8 +91,6 @@ const isOctalDigit = (ch: string | undefined): boolean =>
  * Read one character of a SET starting at `i`, decoding a backslash escape.
  * `\NNN` is one to three octal digits; like GNU tr, a third digit is only
  * taken when the value still fits in a byte, so `\400` is `\40` then `0`.
- * Values above `\177` are rejected: GNU tr reads them as raw bytes, but this
- * tr works on decoded text and would match and emit U+0080-U+00FF instead.
  * Any other escaped character stands for itself, and a trailing backslash
  * is a literal backslash.
  */
@@ -106,14 +108,25 @@ function readSetChar(set: string, i: number): { char: string; next: number } {
       value = candidate;
       j++;
     }
-    if (value > 0o177) {
-      throw new Error(
-        `tr: invalid escape '${set.slice(i, j)}': octal values above \\177 are not supported`,
-      );
-    }
     return { char: String.fromCharCode(value), next: j };
   }
   return { char: ESCAPES.get(next) ?? next, next: i + 2 };
+}
+
+/** Whether a SET names a byte above `\177` with an octal escape. */
+function hasHighOctalEscape(set: string): boolean {
+  for (let i = 0; i < set.length; ) {
+    const { char, next } = readSetChar(set, i);
+    if (
+      set[i] === "\\" &&
+      isOctalDigit(set[i + 1]) &&
+      char.charCodeAt(0) > 0o177
+    ) {
+      return true;
+    }
+    i = next;
+  }
+  return false;
 }
 
 function expandRange(
@@ -243,10 +256,17 @@ export const trCommand: RuntimeCommand = {
       ctx.limits.maxOutputSize,
       ctx.limits.maxStringLength,
     );
+    // GNU tr works on bytes. This tr decodes its input so that a SET like 'é'
+    // matches the character, but an octal escape above \177 names a single
+    // byte. A SET with one switches tr to bytes: the input is not decoded, and
+    // the SETs' own characters become their UTF-8 bytes, as in GNU tr.
+    const byteMode = sets.some(hasHighOctalEscape);
+    const setBytes = (set: string): string =>
+      byteMode ? latin1FromBytes(encodeUtf8ToBytes(set)) : set;
     try {
       const expansionBudget = { iterations: 0 };
       set1Raw = expandRange(
-        sets[0],
+        setBytes(sets[0]),
         maxStringLength,
         maxIterations,
         expansionBudget,
@@ -254,7 +274,7 @@ export const trCommand: RuntimeCommand = {
       set2 =
         sets.length > 1
           ? expandRange(
-              sets[1],
+              setBytes(sets[1]),
               maxStringLength,
               maxIterations,
               expansionBudget,
@@ -269,16 +289,18 @@ export const trCommand: RuntimeCommand = {
         exitCode: 1,
       };
     }
-    // Translation operates on codepoints — set1 / set2 args are real Unicode
-    // strings, so we must decode bytes to UTF-8 first, otherwise multibyte
-    // chars don't match the SET they were spelled with.
+    // Outside byte mode, translation operates on codepoints — set1 / set2 args
+    // are real Unicode strings, so we must decode bytes to UTF-8 first,
+    // otherwise multibyte chars don't match the SET they were spelled with.
     if (latin1FromBytes(ctx.stdin).length > maxStringLength) {
       throw new ExecutionLimitError(
         `tr: input size limit exceeded (${maxStringLength} bytes)`,
         "string_length",
       );
     }
-    const content = decodeBytesToUtf8(ctx.stdin);
+    const content = byteMode
+      ? latin1FromBytes(ctx.stdin)
+      : decodeBytesToUtf8(ctx.stdin);
     if (set1Raw.length > maxArrayElements || set2.length > maxArrayElements) {
       throw new ExecutionLimitError(
         `tr: array element limit exceeded (${maxArrayElements})`,
@@ -302,7 +324,8 @@ export const trCommand: RuntimeCommand = {
       // Every append is empty or one codepoint, so account for its UTF-8
       // width directly. Lone surrogate code units still cost three bytes.
       let bytes = 0;
-      if (value.length === 2) bytes = 4;
+      if (byteMode) bytes = value.length;
+      else if (value.length === 2) bytes = 4;
       else if (value.length === 1) {
         const code = value.charCodeAt(0);
         bytes = code <= 0x7f ? 1 : code <= 0x7ff ? 2 : 3;
@@ -384,11 +407,13 @@ export const trCommand: RuntimeCommand = {
       }
     }
 
-    // tr emits text; the pipeline handles encoding.
+    // In byte mode stdout is already bytes; otherwise tr emits text and the
+    // pipeline handles encoding.
     return {
       stdout: output.finish(),
       stderr: "",
       exitCode: 0,
+      ...(byteMode && { stdoutKind: "bytes" as const }),
     };
   },
 };
