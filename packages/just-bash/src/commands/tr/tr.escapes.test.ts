@@ -92,6 +92,29 @@ describe("tr escape sequences", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it("rejects an octal escape above \\177", async () => {
+    const result = await run("echo X | tr X '\\377'");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "tr: invalid escape '\\377': octal values above \\177 are not supported\n",
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("rejects a range ending above \\177", async () => {
+    const result = await run("echo café | tr -d '\\200-\\377'");
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("tr: invalid escape '\\200'");
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("accepts \\177 itself", async () => {
+    const result = await run("printf 'a\\177b\\n' | tr -d '\\177'");
+    expect(result.stdout).toBe("ab\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
   it("keeps a trailing backslash literal", async () => {
     const result = await run("printf 'a\\\\b\\n' | tr 'a\\' 'xy'");
     expect(result.stdout).toBe("xyb\n");
