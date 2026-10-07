@@ -3,7 +3,11 @@
  * Used by printf command and find -printf
  */
 
-import { utf8ByteLength } from "../../encoding.js";
+import {
+  decodeByteEscapes,
+  readOctalOrHexEscape,
+  utf8ByteLength,
+} from "../../encoding.js";
 import { ExecutionLimitError } from "../../interpreter/errors.js";
 
 export { utf8ByteLength } from "../../encoding.js";
@@ -201,44 +205,19 @@ export function processEscapes(
         case "5":
         case "6":
         case "7": {
-          // Octal escape sequence
-          let octal = "";
-          let j = i + 1;
-          while (j < str.length && j < i + 4 && /[0-7]/.test(str[j])) {
-            octal += str[j];
-            j++;
-          }
-          result += String.fromCharCode(parseInt(octal, 8));
-          i = j;
+          // Octal escape sequence, decoded with the rest of its byte run
+          const run = decodeByteEscapes(str, i, readOctalOrHexEscape);
+          result += run.text;
+          i = run.next;
           break;
         }
         case "x": {
-          // Hex escape sequence \xHH
-          // Collect consecutive \xHH escapes and try to decode as UTF-8
-          const bytes: number[] = [];
-          let j = i;
-          while (
-            j + 3 < str.length &&
-            str[j] === "\\" &&
-            str[j + 1] === "x" &&
-            /[0-9a-fA-F]{2}/.test(str.slice(j + 2, j + 4))
-          ) {
-            bytes.push(parseInt(str.slice(j + 2, j + 4), 16));
-            j += 4;
-          }
-
-          if (bytes.length > 0) {
-            // Try to decode the bytes as UTF-8
-            try {
-              const decoder = new TextDecoder("utf-8", { fatal: true });
-              result += decoder.decode(new Uint8Array(bytes));
-            } catch {
-              // If not valid UTF-8, fall back to Latin-1 (1:1 byte to codepoint)
-              for (const byte of bytes) {
-                result += String.fromCharCode(byte);
-              }
-            }
-            i = j;
+          // Hex escape sequence \xHH. A run of byte escapes (hex or octal) is
+          // decoded as UTF-8 together; invalid bytes become Latin-1 characters.
+          const run = decodeByteEscapes(str, i, readOctalOrHexEscape);
+          if (run.next > i) {
+            result += run.text;
+            i = run.next;
           } else {
             // No valid hex escape, keep the backslash
             result += str[i];
