@@ -35,7 +35,7 @@ const trHelp = {
   [:graph:]   all printable characters except space
   [:cntrl:]   all control characters
   [:xdigit:]  all hexadecimal digits
-  \\NNN       character with octal value NNN (1 to 3 digits)
+  \\NNN       character with octal value NNN (1 to 3 digits, up to \\177)
   \\\\, \\a, \\b, \\f, \\n, \\r, \\t, \\v  escape sequences`,
 };
 
@@ -87,6 +87,8 @@ const isOctalDigit = (ch: string | undefined): boolean =>
  * Read one character of a SET starting at `i`, decoding a backslash escape.
  * `\NNN` is one to three octal digits; like GNU tr, a third digit is only
  * taken when the value still fits in a byte, so `\400` is `\40` then `0`.
+ * Values above `\177` are rejected: GNU tr reads them as raw bytes, but this
+ * tr works on decoded text and would match and emit U+0080-U+00FF instead.
  * Any other escaped character stands for itself, and a trailing backslash
  * is a literal backslash.
  */
@@ -103,6 +105,11 @@ function readSetChar(set: string, i: number): { char: string; next: number } {
       if (candidate > 0o377) break;
       value = candidate;
       j++;
+    }
+    if (value > 0o177) {
+      throw new Error(
+        `tr: invalid escape '${set.slice(i, j)}': octal values above \\177 are not supported`,
+      );
     }
     return { char: String.fromCharCode(value), next: j };
   }
