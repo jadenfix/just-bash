@@ -92,25 +92,45 @@ describe("tr escape sequences", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it("rejects an octal escape above \\177", async () => {
-    const result = await run("echo X | tr X '\\377'");
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe(
-      "tr: invalid escape '\\377': octal values above \\177 are not supported\n",
-    );
-    expect(result.exitCode).toBe(1);
+  it("emits one byte for an octal escape above \\177", async () => {
+    const env = new Bash({ files: {}, cwd: "/" });
+    const result = await env.exec("echo X | tr X '\\377' > /out");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(Array.from(await env.fs.readFileBuffer("/out"))).toEqual([
+      0xff, 0x0a,
+    ]);
   });
 
-  it("rejects a range ending above \\177", async () => {
-    const result = await run("echo café | tr -d '\\200-\\377'");
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain("tr: invalid escape '\\200'");
-    expect(result.exitCode).toBe(1);
-  });
-
-  it("accepts \\177 itself", async () => {
-    const result = await run("printf 'a\\177b\\n' | tr -d '\\177'");
+  it("deletes a byte above \\177", async () => {
+    const env = new Bash({
+      files: { "/in.bin": new Uint8Array([0x61, 0xff, 0x62, 0x0a]) },
+      cwd: "/",
+    });
+    const result = await env.exec("tr -d '\\377' < /in.bin");
     expect(result.stdout).toBe("ab\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("deletes the bytes of a multibyte character with an octal range", async () => {
+    const result = await run("echo café | tr -d '\\200-\\377'");
+    expect(result.stdout).toBe("caf\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("reads other SET characters as UTF-8 bytes beside a high octal escape", async () => {
+    // é is the bytes \303\251, so it pairs with two characters of SET2.
+    const result = await run("echo é | tr 'é\\377' 'xyz'");
+    expect(result.stdout).toBe("xy\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("still matches by character without a high octal escape", async () => {
+    const result = await run("echo é | tr 'é\\177' 'xyz'");
+    expect(result.stdout).toBe("x\n");
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
   });
