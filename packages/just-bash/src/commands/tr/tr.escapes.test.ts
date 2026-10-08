@@ -85,6 +85,26 @@ describe("tr escape sequences", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it.each([
+    ["tr -d '\\101-\\077'", "A-?"],
+    ["tr -d 'z-a'", "z-a"],
+    ["tr 'a' 'z-a'", "z-a"],
+  ])("rejects descending ranges in %s", async (command, range) => {
+    const result = await run(`echo abc | ${command}`);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      `tr: range-endpoints of '${range}' are in reverse collating sequence order\n`,
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("accepts equal escaped range endpoints", async () => {
+    const result = await run("echo abc | tr '\\141-\\141' X");
+    expect(result.stdout).toBe("Xbc\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
   it("treats an escaped dash as a literal, not a range", async () => {
     const result = await run("echo a-b-c | tr 'a\\-c' 'x_z'");
     expect(result.stdout).toBe("x_b_z\n");

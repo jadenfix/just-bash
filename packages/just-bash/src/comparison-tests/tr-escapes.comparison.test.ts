@@ -63,4 +63,14 @@ describe("tr escape sequences - Real Bash Comparison", () => {
     });
     await compareOutputs(env, testDir, "cat test.txt | tr '\\\\' '/'");
   });
+
+  it.each([
+    "echo abc | tr -d '\\101-\\077'",
+    "echo abc | tr -d 'z-a'",
+    "echo abc | tr 'a' 'z-a'",
+    "echo abc | tr '\\141-\\141' X",
+  ])("should match GNU tr for %s", async (command) => {
+    const env = await setupFiles(testDir, {});
+    await compareOutputs(env, testDir, command);
+  });
 });
