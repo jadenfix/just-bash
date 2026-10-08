@@ -179,7 +179,12 @@ function expandRange(
       const last = readSetChar(set, first.next + 1);
       const start = first.char.charCodeAt(0);
       const end = last.char.charCodeAt(0);
-      const rangeLength = end >= start ? end - start + 1 : 0;
+      if (end < start) {
+        throw new Error(
+          `tr: range-endpoints of '${first.char}-${last.char}' are in reverse collating sequence order`,
+        );
+      }
+      const rangeLength = end - start + 1;
       useIterations(rangeLength);
       if (rangeLength > maxLength - result.length) {
         throw new ExecutionLimitError(
