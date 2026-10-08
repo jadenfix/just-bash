@@ -68,6 +68,15 @@ describe("byte escapes that spell UTF-8 - Real Bash Comparison", () => {
     await compareOutputs(env, testDir, "printf 'a\\x9z\\n' | cat -vt");
   });
 
+  it("should keep a % made by an escape literal", async () => {
+    const env = await setupFiles(testDir, {});
+    await compareOutputs(
+      env,
+      testDir,
+      "printf '\\045s|\\x25s|\\445s\\n' a b c",
+    );
+  });
+
   it("should end a $'...' hex escape at a non-hex character", async () => {
     const env = await setupFiles(testDir, {});
     await compareOutputs(env, testDir, "echo $'\\x4g' | cat -v");

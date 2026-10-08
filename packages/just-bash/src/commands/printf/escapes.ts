@@ -137,10 +137,19 @@ export function parseWidthPrecision(
   return [width, precision, i - startIndex];
 }
 
+/** Text an escape produced, with `%` doubled so the format parser keeps it literal. */
+function escapedLiteral(text: string): string {
+  return text.replaceAll("%", "%%");
+}
+
 /**
  * Process escape sequences in a string
  * Handles: \n, \t, \r, \\, \a, \b, \f, \v, \e, \0NNN (octal), \xHH (hex),
  *          \uHHHH (unicode), \UHHHHHHHH (unicode)
+ *
+ * The result is a format that printf and find -printf go on to parse for
+ * directives, so a `%` that an escape produces is doubled: bash reads escapes
+ * and directives in one pass, and `printf '\045s'` prints `%s`.
  */
 export function processEscapes(
   str: string,
@@ -207,7 +216,7 @@ export function processEscapes(
         case "7": {
           // Octal escape sequence, decoded with the rest of its byte run
           const run = decodeByteEscapes(str, i, readOctalOrHexEscape);
-          result += run.text;
+          result += escapedLiteral(run.text);
           i = run.next;
           break;
         }
@@ -216,7 +225,7 @@ export function processEscapes(
           // decoded as UTF-8 together; invalid bytes become Latin-1 characters.
           const run = decodeByteEscapes(str, i, readOctalOrHexEscape);
           if (run.next > i) {
-            result += run.text;
+            result += escapedLiteral(run.text);
             i = run.next;
           } else {
             // No valid hex escape, keep the backslash
@@ -234,7 +243,7 @@ export function processEscapes(
             j++;
           }
           if (hex) {
-            result += String.fromCodePoint(parseInt(hex, 16));
+            result += escapedLiteral(String.fromCodePoint(parseInt(hex, 16)));
             i = j;
           } else {
             result += "\\u";
@@ -251,7 +260,7 @@ export function processEscapes(
             j++;
           }
           if (hex) {
-            result += String.fromCodePoint(parseInt(hex, 16));
+            result += escapedLiteral(String.fromCodePoint(parseInt(hex, 16)));
             i = j;
           } else {
             result += "\\U";

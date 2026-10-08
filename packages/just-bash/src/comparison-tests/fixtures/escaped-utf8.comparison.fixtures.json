@@ -27,6 +27,13 @@
     "stderr": "",
     "exitCode": 0
   },
+  "96d02f9f973581e6": {
+    "command": "printf '\\045s|\\x25s|\\445s\\n' a b c",
+    "files": {},
+    "stdout": "%s|%s|%s\n",
+    "stderr": "",
+    "exitCode": 0
+  },
   "b7c8af3734eb9de5": {
     "command": "echo -e '\\0303\\0251|\\xc3\\xa9' | cat -v",
     "files": {},
