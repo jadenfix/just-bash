@@ -110,6 +110,23 @@ describe("byte escapes that spell UTF-8", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it("keeps a % made by an escape literal in a printf format", async () => {
+    const result = await new Bash().exec(
+      "printf '\\045s|\\x25s|\\445s|\\u25s\\n' a b c d",
+    );
+    expect(result.stdout).toBe("%s|%s|%s|%s\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("keeps a % made by an escape literal in find -printf", async () => {
+    const env = new Bash({ files: { "/d/f": "" } });
+    const result = await env.exec("find /d/f -printf '\\045p\\n'");
+    expect(result.stdout).toBe("%p\n");
+    expect(result.stderr).toBe("");
+    expect(result.exitCode).toBe(0);
+  });
+
   it("decodes octal escapes in find -printf", async () => {
     const env = new Bash({ files: { "/d/f": "" } });
     const result = await env.exec("find /d/f -printf '\\303\\251\\n' | cat -v");
