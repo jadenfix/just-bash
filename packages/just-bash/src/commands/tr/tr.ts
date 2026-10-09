@@ -249,6 +249,15 @@ export const trCommand: RuntimeCommand = {
       };
     }
 
+    const maxOperands = deleteMode && !squeezeMode ? 1 : 2;
+    if (sets.length > maxOperands) {
+      return {
+        stdout: "",
+        stderr: `tr: extra operand '${sanitizeErrorMessage(sets[maxOperands])}'\n`,
+        exitCode: 1,
+      };
+    }
+
     let set1Raw: string;
     let set2: string;
     const maxStringLength = Math.min(
