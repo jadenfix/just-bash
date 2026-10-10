@@ -129,6 +129,14 @@ function hasHighOctalEscape(set: string): boolean {
   return false;
 }
 
+/** GNU tr renders non-printable bytes in range errors as three-digit octal. */
+function formatRangeEndpoint(char: string): string {
+  const code = char.charCodeAt(0);
+  return code < 0x20 || (code >= 0x7f && code <= 0xff)
+    ? `\\${code.toString(8).padStart(3, "0")}`
+    : char;
+}
+
 function expandRange(
   set: string,
   maxLength: number,
@@ -181,7 +189,7 @@ function expandRange(
       const end = last.char.charCodeAt(0);
       if (end < start) {
         throw new Error(
-          `tr: range-endpoints of '${first.char}-${last.char}' are in reverse collating sequence order`,
+          `tr: range-endpoints of '${formatRangeEndpoint(first.char)}-${formatRangeEndpoint(last.char)}' are in reverse collating sequence order`,
         );
       }
       const rangeLength = end - start + 1;

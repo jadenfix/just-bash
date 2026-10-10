@@ -27,4 +27,20 @@ describe("tr operand validation - Real Bash Comparison", () => {
     const env = await setupFiles(testDir, {});
     await compareOutputs(env, testDir, command);
   });
+
+  it.each([
+    "tr '\\037-\\001' X",
+    "tr 'z-\\n' X",
+    "tr X '\\t-\\0'",
+    "tr -d '\\177-~'",
+    "tr -s '\\200-\\177'",
+    "tr -ds X '\\377-\\200'",
+    "tr 'z-a' X",
+    "tr 'z- ' X",
+    "tr '\\\\-A' X",
+  ])("formats reversed range endpoints in %s", async (command) => {
+    const env = await setupFiles(testDir, {});
+    // The comparison runner checks stdout, so include the diagnostic there.
+    await compareOutputs(env, testDir, `${command} 2>&1`);
+  });
 });
