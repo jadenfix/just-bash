@@ -249,7 +249,10 @@ export const trCommand: RuntimeCommand = {
       };
     }
 
-    if (!deleteMode && !squeezeMode && sets.length < 2) {
+    if (
+      ((!deleteMode && !squeezeMode) || (deleteMode && squeezeMode)) &&
+      sets.length < 2
+    ) {
       return {
         stdout: "",
         stderr: "tr: missing operand after SET1\n",
@@ -282,7 +285,22 @@ export const trCommand: RuntimeCommand = {
     // matches the character, but an octal escape above \177 names a single
     // byte. A SET with one switches tr to bytes: the input is not decoded, and
     // the SETs' own characters become their UTF-8 bytes, as in GNU tr.
-    const byteMode = sets.some(hasHighOctalEscape);
+    const inputBytes = latin1FromBytes(ctx.stdin);
+    if (inputBytes.length > maxStringLength) {
+      throw new ExecutionLimitError(
+        `tr: input size limit exceeded (${maxStringLength} bytes)`,
+        "string_length",
+      );
+    }
+    const hasByteEscape = sets.some(hasHighOctalEscape);
+    const decodedInput = hasByteEscape
+      ? inputBytes
+      : decodeBytesToUtf8(ctx.stdin);
+    // The decoder falls back to the raw Latin-1 view for invalid UTF-8.
+    // Keep that fallback byte-shaped on output instead of re-encoding it.
+    const byteMode =
+      hasByteEscape ||
+      (decodedInput === inputBytes && /[^\x00-\x7f]/.test(inputBytes));
     const setBytes = (set: string): string =>
       byteMode ? latin1FromBytes(encodeUtf8ToBytes(set)) : set;
     try {
@@ -314,15 +332,7 @@ export const trCommand: RuntimeCommand = {
     // Outside byte mode, translation operates on codepoints — set1 / set2 args
     // are real Unicode strings, so we must decode bytes to UTF-8 first,
     // otherwise multibyte chars don't match the SET they were spelled with.
-    if (latin1FromBytes(ctx.stdin).length > maxStringLength) {
-      throw new ExecutionLimitError(
-        `tr: input size limit exceeded (${maxStringLength} bytes)`,
-        "string_length",
-      );
-    }
-    const content = byteMode
-      ? latin1FromBytes(ctx.stdin)
-      : decodeBytesToUtf8(ctx.stdin);
+    const content = byteMode ? inputBytes : decodedInput;
     if (set1Raw.length > maxArrayElements || set2.length > maxArrayElements) {
       throw new ExecutionLimitError(
         `tr: array element limit exceeded (${maxArrayElements})`,
@@ -363,6 +373,7 @@ export const trCommand: RuntimeCommand = {
     };
 
     if (deleteMode) {
+      let prev = "";
       // Delete characters in set1 (or complement of set1)
       // Advance by codepoint without allocating a string-iterator result per
       // character. Use the same traversal in the squeeze/translation loops.
@@ -370,9 +381,12 @@ export const trCommand: RuntimeCommand = {
         const code = content.codePointAt(i) as number;
         const char = code > 0xffff ? content.slice(i, i + 2) : content[i];
         i += char.length;
-        if (!isInSet1(char)) {
-          appendOutput(char);
-        }
+        if (isInSet1(char)) continue;
+        // Deletion can bring two SET2 characters together. Only retained
+        // characters advance the squeeze state.
+        if (squeezeMode && set2Chars.has(char) && char === prev) continue;
+        appendOutput(char);
+        prev = char;
       }
     } else if (squeezeMode && sets.length === 1) {
       // Squeeze consecutive characters in set1
