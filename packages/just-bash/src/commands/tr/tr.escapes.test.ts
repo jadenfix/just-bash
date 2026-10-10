@@ -89,6 +89,13 @@ describe("tr escape sequences", () => {
     ["tr -d '\\101-\\077'", "A-?"],
     ["tr -d 'z-a'", "z-a"],
     ["tr 'a' 'z-a'", "z-a"],
+    ["tr '\\037-\\001' X", "\\037-\\001"],
+    ["tr 'z-\\n' X", "z-\\012"],
+    ["tr X '\\t-\\0'", "\\011-\\000"],
+    ["tr -d '\\177-~'", "\\177-~"],
+    ["tr -s '\\200-\\177'", "\\200-\\177"],
+    ["tr -ds X '\\377-\\200'", "\\377-\\200"],
+    ["tr 'z- ' X", "z- "],
   ])("rejects descending ranges in %s", async (command, range) => {
     const result = await run(`echo abc | ${command}`);
     expect(result.stdout).toBe("");
