@@ -9,3 +9,5 @@ tr: decode octal escapes and `\\`, `\a`, `\b`, `\f`, `\v` in SETs
 Extra operands are rejected before SET expansion or byte-mode selection, so an invalid trailing SET cannot change how valid SETs process the input.
 
 Reversed-range errors render non-printable byte endpoints as three-digit octal escapes rather than emitting raw control characters.
+
+Combined `-ds` requires both SETs and squeezes SET2 after deleting SET1, including repetitions joined by deletion. Invalid UTF-8 input stays byte-shaped through translation, deletion, and squeezing instead of being re-encoded as text.
