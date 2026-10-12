@@ -11,14 +11,16 @@
     "files": {},
     "stdout": "",
     "stderr": "tr: range-endpoints of 'z-a' are in reverse collating sequence order\n",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "542a665a7168089e": {
     "command": "echo abc | tr -d 'z-a'",
     "files": {},
     "stdout": "",
     "stderr": "tr: range-endpoints of 'z-a' are in reverse collating sequence order\n",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "686811c3eceacb68": {
     "command": "cat test.txt | tr -d '\\000-\\037'",
@@ -71,7 +73,8 @@
     "files": {},
     "stdout": "",
     "stderr": "tr: range-endpoints of 'A-?' are in reverse collating sequence order\n",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "fcdf258b90977308": {
     "command": "echo abc | tr '\\141-\\141' X",
