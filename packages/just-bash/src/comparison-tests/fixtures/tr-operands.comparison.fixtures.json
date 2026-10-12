@@ -4,14 +4,16 @@
     "files": {},
     "stdout": "tr: range-endpoints of '\\200-\\177' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "0a22866bedfb5a0f": {
     "command": "tr 'z-\\n' X 2>&1",
     "files": {},
     "stdout": "tr: range-endpoints of 'z-\\012' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "0e1b41cfac673107": {
     "command": "echo é | tr -d 'é' '\\377'",
@@ -25,21 +27,24 @@
     "files": {},
     "stdout": "tr: range-endpoints of '\\037-\\001' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "3e95a98559c160eb": {
     "command": "tr -ds X '\\377-\\200' 2>&1",
     "files": {},
     "stdout": "tr: range-endpoints of '\\377-\\200' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "5874b07c775c90e7": {
     "command": "tr '\\\\-A' X 2>&1",
     "files": {},
     "stdout": "tr: range-endpoints of '\\-A' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "64b42a1ec815a6b0": {
     "command": "echo é | tr -s 'é' X '\\377'",
@@ -60,14 +65,16 @@
     "files": {},
     "stdout": "tr: range-endpoints of 'z- ' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "b746debb0a3cbbc9": {
     "command": "tr 'z-a' X 2>&1",
     "files": {},
     "stdout": "tr: range-endpoints of 'z-a' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "ca09d23b4b25c701": {
     "command": "echo é | tr -ds 'é' X '\\377'",
@@ -88,13 +95,15 @@
     "files": {},
     "stdout": "tr: range-endpoints of '\\177-~' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   },
   "f11a0f24da0208b6": {
     "command": "tr X '\\t-\\0' 2>&1",
     "files": {},
     "stdout": "tr: range-endpoints of '\\011-\\000' are in reverse collating sequence order\n",
     "stderr": "",
-    "exitCode": 1
+    "exitCode": 1,
+    "locked": true
   }
 }

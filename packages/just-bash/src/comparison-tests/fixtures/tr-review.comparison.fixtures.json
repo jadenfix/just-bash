@@ -25,14 +25,16 @@
     "files": {},
     "stdout": "/0GA\n",
     "stderr": "",
-    "exitCode": 0
+    "exitCode": 0,
+    "locked": true
   },
   "874b80cf57074504": {
     "command": "printf /wEBgA== | base64 -d | tr -s '\\001' | base64",
     "files": {},
     "stdout": "/wGA\n",
     "stderr": "",
-    "exitCode": 0
+    "exitCode": 0,
+    "locked": true
   },
   "9ff760b81716c8d1": {
     "command": "printf aaa | tr -ds a",
@@ -46,7 +48,8 @@
     "files": {},
     "stdout": "/w==\n",
     "stderr": "",
-    "exitCode": 0
+    "exitCode": 0,
+    "locked": true
   },
   "a68545e1ae8e7557": {
     "command": "printf aaabbb | tr -ds a b",
@@ -60,6 +63,7 @@
     "files": {},
     "stdout": "/w==\n",
     "stderr": "",
-    "exitCode": 0
+    "exitCode": 0,
+    "locked": true
   }
 }
