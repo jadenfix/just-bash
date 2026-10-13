@@ -45,7 +45,9 @@ describe("tr escape sequences", () => {
     // GNU tr reads \400 as \40 followed by 0, so space maps to space.
     const result = await run("printf 'a b0\\n' | tr ' 0' '\\400'");
     expect(result.stdout).toBe("a b0\n");
-    expect(result.stderr).toBe("");
+    expect(result.stderr).toBe(
+      "tr: warning: the ambiguous octal escape \\400 is being\n\tinterpreted as the 2-byte sequence \\040, 0\n",
+    );
     expect(result.exitCode).toBe(0);
   });
 
@@ -155,9 +157,9 @@ describe("tr escape sequences", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it("still matches by character without a high octal escape", async () => {
+  it("uses bytes beside a low octal escape", async () => {
     const result = await run("echo é | tr 'é\\177' 'xyz'");
-    expect(result.stdout).toBe("x\n");
+    expect(result.stdout).toBe("xy\n");
     expect(result.stderr).toBe("");
     expect(result.exitCode).toBe(0);
   });

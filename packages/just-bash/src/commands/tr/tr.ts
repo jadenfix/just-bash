@@ -94,7 +94,11 @@ const isOctalDigit = (ch: string | undefined): boolean =>
  * Any other escaped character stands for itself, and a trailing backslash
  * is a literal backslash.
  */
-function readSetChar(set: string, i: number): { char: string; next: number } {
+function readSetChar(
+  set: string,
+  i: number,
+  warn?: (message: string) => void,
+): { char: string; next: number } {
   if (set[i] !== "\\" || i + 1 >= set.length) {
     return { char: set[i], next: i + 1 };
   }
@@ -104,7 +108,12 @@ function readSetChar(set: string, i: number): { char: string; next: number } {
     let j = i + 1;
     while (j < i + 4 && isOctalDigit(set[j])) {
       const candidate = value * 8 + (set.charCodeAt(j) - 48);
-      if (candidate > 0o377) break;
+      if (candidate > 0o377) {
+        warn?.(
+          `tr: warning: the ambiguous octal escape ${set.slice(i, j + 1)} is being\n\tinterpreted as the 2-byte sequence \\${value.toString(8).padStart(3, "0")}, ${set[j]}\n`,
+        );
+        break;
+      }
       value = candidate;
       j++;
     }
@@ -113,15 +122,11 @@ function readSetChar(set: string, i: number): { char: string; next: number } {
   return { char: ESCAPES.get(next) ?? next, next: i + 2 };
 }
 
-/** Whether a SET names a byte above `\177` with an octal escape. */
-function hasHighOctalEscape(set: string): boolean {
+/** Whether a SET contains an octal byte escape. */
+function hasOctalEscape(set: string): boolean {
   for (let i = 0; i < set.length; ) {
-    const { char, next } = readSetChar(set, i);
-    if (
-      set[i] === "\\" &&
-      isOctalDigit(set[i + 1]) &&
-      char.charCodeAt(0) > 0o177
-    ) {
+    const { next } = readSetChar(set, i);
+    if (set[i] === "\\" && isOctalDigit(set[i + 1])) {
       return true;
     }
     i = next;
@@ -142,6 +147,7 @@ function expandRange(
   maxLength: number,
   maxIterations: number,
   budget: { iterations: number },
+  warn: (message: string) => void,
 ): string {
   let result = "";
   let i = 0;
@@ -180,11 +186,11 @@ function expandRange(
       if (found) continue;
     }
 
-    const first = readSetChar(set, i);
+    const first = readSetChar(set, i, warn);
 
     // Handle character ranges like a-z; either endpoint may be an escape
     if (set[first.next] === "-" && first.next + 1 < set.length) {
-      const last = readSetChar(set, first.next + 1);
+      const last = readSetChar(set, first.next + 1, warn);
       const start = first.char.charCodeAt(0);
       const end = last.char.charCodeAt(0);
       if (end < start) {
@@ -279,12 +285,22 @@ export const trCommand: RuntimeCommand = {
       ctx.limits.maxStringLength,
     );
     // GNU tr works on bytes. This tr decodes its input so that a SET like 'é'
-    // matches the character, but an octal escape above \177 names a single
+    // matches the character, but an octal escape names a single
     // byte. A SET with one switches tr to bytes: the input is not decoded, and
     // the SETs' own characters become their UTF-8 bytes, as in GNU tr.
-    const byteMode = sets.some(hasHighOctalEscape);
+    const byteMode = sets.some(hasOctalEscape);
     const setBytes = (set: string): string =>
       byteMode ? latin1FromBytes(encodeUtf8ToBytes(set)) : set;
+    let stderr = "";
+    const warn = (message: string): void => {
+      if (message.length > maxOutputSize - stderr.length) {
+        throw new ExecutionLimitError(
+          `tr: warning output limit exceeded (${maxOutputSize} bytes)`,
+          "output_size",
+        );
+      }
+      stderr += message;
+    };
     try {
       const expansionBudget = { iterations: 0 };
       set1Raw = expandRange(
@@ -292,6 +308,7 @@ export const trCommand: RuntimeCommand = {
         maxStringLength,
         maxIterations,
         expansionBudget,
+        warn,
       );
       set2 =
         sets.length > 1
@@ -300,6 +317,7 @@ export const trCommand: RuntimeCommand = {
               maxStringLength,
               maxIterations,
               expansionBudget,
+              warn,
             )
           : "";
     } catch (e) {
@@ -307,7 +325,7 @@ export const trCommand: RuntimeCommand = {
       const message = sanitizeErrorMessage((e as Error).message);
       return {
         stdout: "",
-        stderr: `${message}\n`,
+        stderr: `${stderr}${message}\n`,
         exitCode: 1,
       };
     }
@@ -433,7 +451,7 @@ export const trCommand: RuntimeCommand = {
     // pipeline handles encoding.
     return {
       stdout: output.finish(),
-      stderr: "",
+      stderr,
       exitCode: 0,
       ...(byteMode && { stdoutKind: "bytes" as const }),
     };
