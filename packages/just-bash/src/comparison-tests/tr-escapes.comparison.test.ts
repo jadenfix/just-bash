@@ -65,6 +65,8 @@ describe("tr escape sequences - Real Bash Comparison", () => {
   });
 
   it.each([
+    "printf 'é' | tr 'é\\177' xyz",
+    "printf 'a b0' | tr ' 0' '\\400' 2>warnings.txt; cat warnings.txt",
     "echo abc | tr -d '\\101-\\077'",
     "echo abc | tr -d 'z-a'",
     "echo abc | tr 'a' 'z-a'",

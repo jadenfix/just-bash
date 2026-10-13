@@ -68,6 +68,14 @@
     "stderr": "",
     "exitCode": 0
   },
+  "d1280dd7f4386fd5": {
+    "command": "printf 'a b0' | tr ' 0' '\\400' 2>warnings.txt; cat warnings.txt",
+    "files": {},
+    "stdout": "a b0tr: warning: the ambiguous octal escape \\400 is being\n\tinterpreted as the 2-byte sequence \\040, 0\n",
+    "stderr": "",
+    "exitCode": 0,
+    "locked": true
+  },
   "dd56e01669ca7c96": {
     "command": "echo abc | tr -d '\\101-\\077'",
     "files": {},
@@ -75,6 +83,13 @@
     "stderr": "tr: range-endpoints of 'A-?' are in reverse collating sequence order\n",
     "exitCode": 1,
     "locked": true
+  },
+  "dfafd90b74014f02": {
+    "command": "printf 'é' | tr 'é\\177' xyz",
+    "files": {},
+    "stdout": "xy",
+    "stderr": "",
+    "exitCode": 0
   },
   "fcdf258b90977308": {
     "command": "echo abc | tr '\\141-\\141' X",
