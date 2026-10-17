@@ -36,12 +36,28 @@ const cpHelp = {
   ],
 };
 
-/** Permission errors that `cp -f` answers by replacing the destination. */
 const PERMISSION_DENIED_CODES = new Set(["EACCES", "EPERM"]);
 
 function isPermissionDenied(error: unknown): boolean {
   const code = getErrorCode(error);
   return code !== undefined && PERMISSION_DENIED_CODES.has(code);
+}
+
+/**
+ * Whether a failed copy is one that `cp -f` answers by replacing the
+ * destination. GNU cp does so after any failure to open the destination
+ * except ENOENT. The filesystem reports such a failure with a bare errno,
+ * `CODE: cp 'path'` (see `sanitizeFsError`), while its own refusals, such as
+ * a sandbox or identity check, give a reason after the code and are not
+ * retried.
+ */
+function isRetriableCopyError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return (
+    code !== undefined &&
+    code !== "ENOENT" &&
+    /^E[A-Z]+: cp '/.test(getErrorMessage(error))
+  );
 }
 
 const argDefs = {
@@ -202,30 +218,25 @@ export const cpCommand: RuntimeCommand = {
           if (
             !force ||
             srcStat.isDirectory ||
-            !isPermissionDenied(error) ||
+            !isRetriableCopyError(error) ||
             !(await isReplaceableFile(ctx, targetPath))
           ) {
             throw error;
           }
           // GNU cp opens the source before it gives up on the destination, so
-          // an unreadable source must leave the destination in place. The
-          // filesystem API has no access() check, so read the source; only a
-          // permission error counts, since a read limit such as
-          // maxFileReadSize does not apply to fs.cp.
+          // a source that cannot be read must leave the destination in place.
+          // The filesystem API has no access() check, so read the source. A
+          // read limit such as maxFileReadSize does not apply to fs.cp, so
+          // only that failure is ignored.
           try {
             await ctx.fs.readFileBuffer(srcPath);
           } catch (readError) {
-            if (
-              readError instanceof ExecutionLimitError ||
-              readError instanceof ExecutionAbortedError
-            ) {
-              throw readError;
-            }
             if (isPermissionDenied(readError)) {
               stderr += `cp: cannot open '${src}' for reading: Permission denied\n`;
               exitCode = 1;
               continue;
             }
+            if (getErrorCode(readError) !== "EFBIG") throw readError;
           }
           try {
             await ctx.fs.rm(targetPath);
