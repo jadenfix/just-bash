@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Bash } from "../../Bash.js";
+import { CopyDestinationOpenError } from "../../fs/copy-errors.js";
 import { InMemoryFs } from "../../fs/in-memory-fs/in-memory-fs.js";
 import type { IFileSystem } from "../../fs/interface.js";
 
@@ -10,7 +11,7 @@ import type { IFileSystem } from "../../fs/interface.js";
  */
 function withFailures(
   fs: IFileSystem,
-  failures: { cp: string; once?: boolean; read?: string },
+  failures: { cp: string | Error; once?: boolean; read?: string },
 ): { fs: IFileSystem; calls: { cp: number } } {
   const calls = { cp: 0 };
   const proxy = new Proxy(fs, {
@@ -23,7 +24,9 @@ function withFailures(
         return async (...args: unknown[]) => {
           calls.cp++;
           if (calls.cp === 1 || !failures.once) {
-            throw new Error(failures.cp);
+            throw typeof failures.cp === "string"
+              ? new Error(failures.cp)
+              : failures.cp;
           }
           return value.apply(target, args);
         };
@@ -39,7 +42,11 @@ function withFailures(
   return { fs: proxy, calls };
 }
 
-function setup(failures: { cp: string; once?: boolean; read?: string }) {
+function setup(failures: {
+  cp: string | Error;
+  once?: boolean;
+  read?: string;
+}) {
   const { fs, calls } = withFailures(
     new InMemoryFs({ "/src.txt": "new\n", "/dst.txt": "old\n" }),
     failures,
@@ -49,7 +56,10 @@ function setup(failures: { cp: string; once?: boolean; read?: string }) {
 
 describe("cp -f after a failed copy", () => {
   it("replaces the destination after a plain open failure", async () => {
-    const { bash, calls } = setup({ cp: "ETXTBSY: cp '/src.txt'", once: true });
+    const { bash, calls } = setup({
+      cp: new CopyDestinationOpenError("ETXTBSY", "/dst.txt"),
+      once: true,
+    });
 
     const result = await bash.exec("cp -fv src.txt dst.txt");
 
@@ -93,7 +103,7 @@ describe("cp -f after a failed copy", () => {
 
   it("keeps the destination when the source is gone", async () => {
     const { bash, calls } = setup({
-      cp: "EACCES: cp '/src.txt'",
+      cp: new CopyDestinationOpenError("EACCES", "/dst.txt"),
       once: true,
       read: "ENOENT: no such file or directory, read '/src.txt'",
     });
@@ -111,7 +121,7 @@ describe("cp -f after a failed copy", () => {
 
   it("keeps the destination when the source read fails", async () => {
     const { bash, calls } = setup({
-      cp: "EACCES: cp '/src.txt'",
+      cp: new CopyDestinationOpenError("EACCES", "/dst.txt"),
       once: true,
       read: "EIO: i/o error, read '/src.txt'",
     });
@@ -129,7 +139,7 @@ describe("cp -f after a failed copy", () => {
 
   it("still replaces the destination past a read limit", async () => {
     const { bash, calls } = setup({
-      cp: "EACCES: cp '/src.txt'",
+      cp: new CopyDestinationOpenError("EACCES", "/dst.txt"),
       once: true,
       read: "EFBIG: file too large, read '/src.txt' (4 bytes, max 1)",
     });

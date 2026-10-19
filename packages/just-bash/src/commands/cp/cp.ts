@@ -1,3 +1,4 @@
+import { CopyDestinationOpenError } from "../../fs/copy-errors.js";
 import { isSameOrDescendantPath } from "../../fs/path-utils.js";
 import {
   compareCanonicalContainment,
@@ -41,23 +42,6 @@ const PERMISSION_DENIED_CODES = new Set(["EACCES", "EPERM"]);
 function isPermissionDenied(error: unknown): boolean {
   const code = getErrorCode(error);
   return code !== undefined && PERMISSION_DENIED_CODES.has(code);
-}
-
-/**
- * Whether a failed copy is one that `cp -f` answers by replacing the
- * destination. GNU cp does so after any failure to open the destination
- * except ENOENT. The filesystem reports such a failure with a bare errno,
- * `CODE: cp 'path'` (see `sanitizeFsError`), while its own refusals, such as
- * a sandbox or identity check, give a reason after the code and are not
- * retried.
- */
-function isRetriableCopyError(error: unknown): boolean {
-  const code = getErrorCode(error);
-  return (
-    code !== undefined &&
-    code !== "ENOENT" &&
-    /^E[A-Z]+: cp '/.test(getErrorMessage(error))
-  );
 }
 
 const argDefs = {
@@ -218,7 +202,8 @@ export const cpCommand: RuntimeCommand = {
           if (
             !force ||
             srcStat.isDirectory ||
-            !isRetriableCopyError(error) ||
+            !(error instanceof CopyDestinationOpenError) ||
+            error.code === "ENOENT" ||
             !(await isReplaceableFile(ctx, targetPath))
           ) {
             throw error;

@@ -128,7 +128,7 @@ describe.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
 
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe(
-        "cp: cannot copy 'src.txt': EACCES: cp '/src.txt'\n",
+        "cp: cannot copy 'src.txt': EACCES: cannot open destination for writing, cp '/dst.txt'\n",
       );
       expect(result.exitCode).toBe(1);
       expect(readHost("dst.txt")).toBe("old\n");
